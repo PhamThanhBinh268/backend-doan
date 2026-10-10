@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HAEIM_Damped — Test chức năng</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Segoe UI, Arial, sans-serif; margin: 0; background: #f4f6f9; color: #222; }
+  header { background: #1a73e8; color: #fff; padding: 14px 20px; }
+  header h1 { margin: 0; font-size: 18px; }
+  header p { margin: 4px 0 0; font-size: 13px; opacity: .9; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .card { background: #fff; border-radius: 8px; padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card h2 { margin: 0 0 10px; font-size: 16px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input, select, button, textarea { font-size: 14px; padding: 7px 9px; border: 1px solid #ccc; border-radius: 6px; }
+  button { background: #1a73e8; color: #fff; border: none; cursor: pointer; }
+  button.ghost { background: #e8eefc; color: #1a73e8; }
+  button.danger { background: #d93025; }
+  button:disabled { opacity: .6; cursor: default; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { border: 1px solid #e0e0e0; padding: 6px 8px; text-align: left; }
+  th { background: #f1f3f4; }
+  .mono { font-family: Consolas, monospace; }
+  #log { background: #202124; color: #e8eaed; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; max-height: 220px; overflow: auto; white-space: pre-wrap; }
+  .ok { color: #188038; font-weight: 600; }
+  .warn { color: #b06000; font-weight: 600; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } }
+  small.hint { color: #666; }
+</style>
+</head>
+<body>
+<header>
+  <h1>HAEIM_Damped — Trang test chức năng backend</h1>
+  <p>Pha 1 Construction (thêm giao dịch) → Pha 2 Restructure + Pha 3 Expansion (khai thác) — bám sát PDF</p>
+</header>
+<main>
+  <div class="card">
+    <h2>1. Trạng thái &amp; tham số (Bảng 2 + §2)</h2>
+    <div class="row">
+      <button onclick="loadStatus()">Tải trạng thái</button>
+      <button class="ghost" onclick="loadConfig()">Xem EU / CU / INV</button>
+      <button class="ghost" onclick="loadExample()">Nạp lại luồng mẫu (Bảng 1)</button>
+      <button class="danger" onclick="resetAll()">Reset luồng</button>
+      <span id="status" class="mono"></span>
+    </div>
+    <div id="config"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>2. Luồng giao dịch — Pha 1 Construction</h2>
+      <div class="row">
+        <button onclick="loadTx()">Xem giao dịch</button>
+      </div>
+      <div id="txList"></div>
+      <h3 style="font-size:14px">Thêm T_j mới</h3>
+      <div class="row">
+        <label>tid (trống = tự tăng): <input id="newTid" type="number" min="1" style="width:90px" placeholder="9" /></label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label>items (dạng <span class="mono">a:1,b:2,c:1</span>):</label>
+        <input id="newItems" style="flex:1;min-width:220px" value="a:1,b:1,c:2" />
+        <button onclick="addTx()">Thêm (Construction)</button>
+      </div>
+      <small class="hint">Chỉ nhận item a..f đã có trong EU/INV. Mỗi lần thêm chỉ ghi u/ae/MAEUB thô, không quét lại luồng cũ.</small>
+    </div>
+    <div class="card">
+      <h2>3. Khai thác — Pha 2 + 3 (Restructure + Expansion)</h2>
+      <div class="row">
+        <label>f (0&lt;f&lt;1): <input id="f" type="number" step="0.01" min="0.01" max="0.99" value="0.8" style="width:80px" /></label>
+        <label>minae: <input id="minae" type="number" step="0.01" min="0" value="0.2" style="width:80px" /></label>
+        <button onclick="mine()">Chạy khai thác</button>
+        <button class="ghost" onclick="loadResults()">Xem DHAEIs</button>
+      </div>
+      <small class="hint">Mặc định PDF: f=0.8, Ltid=8, minae=0.2 → DHAEIs = {b}, {c}, {b,c}.</small>
+      <div id="mineOut"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>4. Soi DAE-List (cấp cửa sổ + entry cấp giao dịch)</h2>
+    <div class="row"><button onclick="loadDae()">Tải DAE-Lists</button> <span id="order" class="mono"></span></div>
+    <div id="daeOut"></div>
+  </div>
+
+  <div class="card">
+    <h2>Log</h2>
+    <div id="log"></div>
+  </div>
+</main>
+<script>
+const API = "";
+function log(msg) {
+  const el = document.getElementById("log");
+  el.textContent = new Date().toLocaleTimeString() + "  " + msg + "\n" + el.textContent;
+}
+async function jget(p) {
+  const r = await fetch(API + p);
+  if (!r.ok) throw new Error(p + " -> " + r.status + " " + await r.text());
+  return r.json();
+}
+async function jpost(p, body) {
+  const r = await fetch(API + p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  if (!r.ok) throw new Error(p + " -> " + r.status + " " + await r.text());
+  return r.json();
+}
+function fmtPat(p) { return "{" + p.join(",") + "}"; }
+
+async function loadStatus() {
+  try { const s = await jget("/"); document.getElementById("status").textContent = `ltid=${s.ltid} | ${s.transactions} GD | f=${s.default.f} minae=${s.default.minae}`; log("GET / ok"); }
+  catch (e) { log("LỖI status: " + e.message); }
+}
+async function loadConfig() {
+  try {
+    const c = await jget("/api/config");
+    let h = `<table><tr><th>mục</th><th>eu</th><th>cu</th><th>inv</th></tr>`;
+    for (const k of Object.keys(c.eu).sort()) h += `<tr><td class="mono">${k}</td><td>${c.eu[k]}</td><td>${c.cu[k]}</td><td>${c.inv[k]}</td></tr>`;
+    h += `</table><small class="hint">default f=${c.default_f}, minae=${c.default_minae}, ltid=${c.ltid}</small>`;
+    document.getElementById("config").innerHTML = h; log("GET /api/config ok");
+  } catch (e) { log("LỖI config: " + e.message); }
+}
+async function loadTx() {
+  try {
+    const d = await jget("/api/transactions");
+    let h = `<p class="mono">Ltid=${d.ltid} — ${d.transactions.length} giao dịch</p><table><tr><th>tid</th><th>items (item:qty)</th></tr>`;
+    for (const t of d.transactions) h += `<tr><td>${t.tid}</td><td class="mono">${t.items.map(x => x.item + ":" + x.qty).join(", ")}</td></tr>`;
+    document.getElementById("txList").innerHTML = h + "</table>"; log(`GET transactions ok (${d.transactions.length})`);
+  } catch (e) { log("LỖI tx: " + e.message); }
+}
+function parseItems(s) {
+  return s.split(",").map(x => x.trim()).filter(Boolean).map(part => {
+    const [item, qty] = part.split(":").map(x => x.trim());
+    if (!item || !qty) throw new Error("Sai định dạng items, ví dụ a:1,b:2");
+    return { item, qty: Number(qty) };
+  });
+}
+async function addTx() {
+  try {
+    const tidVal = document.getElementById("newTid").value;
+    const items = parseItems(document.getElementById("newItems").value);
+    const body = { items };
+    if (tidVal) body.tid = Number(tidVal);
+    const r = await jpost("/api/transactions", body);
+    log(`POST transaction ok: tid=${r.tid}, ltid=${r.ltid}`);
+    loadTx(); loadStatus();
+  } catch (e) { log("LỖI thêm GD: " + e.message); }
+}
+async function mine() {
+  try {
+    const f = Number(document.getElementById("f").value);
+    const minae = Number(document.getElementById("minae").value);
+    const r = await jpost("/api/mine", { f, minae });
+    let h = `<p>Thứ tự sau Restructure (tăng dần SMDAEUB): <b class="mono">[${r.order.join(", ")}]</b> | Ltid=${r.ltid}</p>`;
+    h += `<h3 style="font-size:14px">Ứng viên sau lọc SMDAEUB</h3><table><tr><th>pattern</th><th>Sdae</th><th>SMDAEUB</th><th>STDAEUB</th><th>KL</th></tr>`;
+    for (const c of r.candidates) {
+      const keep = c.stdaeub >= minae ? '<span class="ok">mở rộng</span>' : '<span class="warn">cắt</span>';
+      const haei = c.sdae >= minae ? '<span class="ok">HAEI</span>' : 'loại';
+      h += `<tr><td class="mono">${fmtPat(c.pattern)}</td><td>${c.sdae}</td><td>${c.smdaeub}</td><td>${c.stdaeub}</td><td>${haei} / ${keep}</td></tr>`;
+    }
+    h += `</table><h3 style="font-size:14px">Tập kết quả DHAEIs</h3><table><tr><th>pattern</th><th>Sdae</th></tr>`;
+    for (const d of r.dhaeis) h += `<tr><td class="mono">${fmtPat(d.pattern)}</td><td>${d.sdae}</td></tr>`;
+    document.getElementById("mineOut").innerHTML = h + "</table>";
+    log(`POST mine ok: f=${f} minae=${minae} -> ${r.dhaeis.length} DHAEIs`);
+  } catch (e) { log("LỖI mine: " + e.message); }
+}
+async function loadResults() {
+  try {
+    const r = await jget("/api/results");
+    let h = `<table><tr><th>pattern</th><th>Sdae</th></tr>`;
+    for (const d of r.dhaeis) h += `<tr><td class="mono">${fmtPat(d.pattern)}</td><td>${d.sdae}</td></tr>`;
+    document.getElementById("mineOut").innerHTML = `<p class="mono">Ltid=${r.ltid}</p>` + h + "</table>";
+    log("GET results ok");
+  } catch (e) { log("LỖI results: " + e.message); }
+}
+async function loadDae() {
+  try {
+    const r = await jget("/api/dae-lists");
+    document.getElementById("order").textContent = "order: [" + r.order.join(", ") + "]";
+    let h = "";
+    for (const n of r.nodes) {
+      h += `<h3 style="font-size:14px" class="mono">${fmtPat(n.pattern)} — Inv=${n.inv} Sdae=${n.sdae} SMDAEUB=${n.smdaeub} STDAEUB=${n.stdaeub}</h3>`;
+      h += `<table><tr><th>tid</th><th>u</th><th>ae</th><th>MAEUB</th><th>dae</th><th>MDAEUB</th><th>TDAEUB</th><th>maxru</th><th>minInv</th><th>k</th></tr>`;
+      for (const e of n.entries) h += `<tr><td>${e.tid}</td><td>${e.u}</td><td>${e.ae}</td><td>${e.maeub}</td><td>${e.dae}</td><td>${e.mdaeub}</td><td>${e.tdaeub}</td><td>${e.maxru}</td><td>${e.minInv}</td><td>${e.k}</td></tr>`;
+      h += `</table>`;
+    }
+    document.getElementById("daeOut").innerHTML = h; log(`GET dae-lists ok (${r.nodes.length} nodes)`);
+  } catch (e) { log("LỖI dae: " + e.message); }
+}
+async function resetAll() {
+  try { await jpost("/api/reset", {}); log("POST reset ok"); loadTx(); loadStatus(); } catch (e) { log("LỖI reset: " + e.message); }
+}
+async function loadExample() {
+  try { const r = await jpost("/api/load-example", {}); log(`POST load-example ok: ${r.loaded} GD`); loadTx(); loadStatus(); } catch (e) { log("LỖI example: " + e.message); }
+}
+loadStatus(); loadTx();
+</script>
+</body>
+</html>
