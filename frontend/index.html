@@ -47,6 +47,13 @@
       <span id="status" class="mono"></span>
     </div>
     <div id="config"></div>
+    <div class="row" style="margin-top:6px">
+      <label>item mới: <input id="newItem" style="width:60px" placeholder="g" /></label>
+      <label>eu: <input id="newEu" type="number" step="0.1" min="0.1" style="width:70px" value="5" /></label>
+      <label>inv: <input id="newInv" type="number" step="0.1" min="0.1" style="width:70px" value="60" /></label>
+      <button class="ghost" onclick="addItem()">Đăng ký item</button>
+    </div>
+    <small class="hint">PDF cố định a..f; luồng thực tế phát sinh mục mới thì đăng ký trước khi thêm giao dịch.</small>
   </div>
 
   <div class="grid2">
@@ -65,7 +72,7 @@
         <input id="newItems" style="flex:1;min-width:220px" value="a:1,b:1,c:2" />
         <button onclick="addTx()">Thêm (Construction)</button>
       </div>
-      <small class="hint">Chỉ nhận item a..f đã có trong EU/INV. Mỗi lần thêm chỉ ghi u/ae/MAEUB thô, không quét lại luồng cũ.</small>
+      <small class="hint">Mặc định a..f theo Bảng 2. Item mới cần đăng ký ở mục 1 trước khi thêm.</small>
     </div>
     <div class="card">
       <h2>3. Khai thác — Pha 2 + 3 (Restructure + Expansion)</h2>
@@ -194,6 +201,15 @@ async function resetAll() {
 }
 async function loadExample() {
   try { const r = await jpost("/api/load-example", {}); log(`POST load-example ok: ${r.loaded} GD`); loadTx(); loadStatus(); } catch (e) { log("LỖI example: " + e.message); }
+}
+async function addItem() {
+  try {
+    const item = document.getElementById("newItem").value.trim();
+    const eu = Number(document.getElementById("newEu").value);
+    const inv = Number(document.getElementById("newInv").value);
+    const r = await jpost("/api/items", { item, eu, inv });
+    log(`POST items ok: ${r.item} eu=${r.eu} inv=${r.inv}`); loadConfig();
+  } catch (e) { log("LỖI item: " + e.message); }
 }
 loadStatus(); loadTx();
 </script>

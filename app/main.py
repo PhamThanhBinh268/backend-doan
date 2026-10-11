@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pathlib import Path
 
-from .schemas import MineRequest, NewTransaction
+from .schemas import MineRequest, NewItem, NewTransaction
 from .core.data import CU, DEFAULT_F, DEFAULT_MINAE, EU, INV, EXAMPLE_STREAM
 from .core.haeim_damped import HAEIMDampedMiner
 
@@ -61,18 +61,36 @@ def add_transaction(body: NewTransaction):
         raise HTTPException(400, "Transaction rỗng")
     for it in body.items:
         if it.item not in miner.eu:
-            raise HTTPException(400, f"item '{it.item}' chưa có trong EU/INV (a..f)")
-    miner.construction(tid, [(it.item, it.qty) for it in body.items])
+            raise HTTPException(
+                400,
+                f"item '{it.item}' chưa có trong EU/INV — "
+                "đăng ký trước qua POST /api/items",
+            )
+    try:
+        miner.construction(tid, [(it.item, it.qty) for it in body.items])
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(400, str(exc))
     node_info = {",".join(k): len(v.entries) for k, v in miner.nodes.items() if len(k) == 1}
     return {"tid": tid, "ltid": miner.ltid, "singleton_entry_counts": node_info}
+
+
+@app.post("/api/items")
+def register_item(body: NewItem):
+    """Đăng ký item mới phát sinh trên luồng (ngoài a..f của Bảng 2)."""
+    try:
+        miner.register_item(body.item, body.eu, body.inv)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"item": body.item, "eu": miner.eu[body.item], "inv": miner.inv_table[body.item]}
 
 
 @app.post("/api/mine")
 def mine(body: MineRequest):
     """Pha 2 Restructure + Pha 3 Expansion. Không quét lại luồng gốc."""
-    if not miner.transactions:
-        raise HTTPException(400, "Luồng rỗng")
-    return miner.mine(f=body.f, minae=body.minae)
+    try:
+        return miner.mine(f=body.f, minae=body.minae)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @app.get("/api/results")

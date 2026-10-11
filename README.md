@@ -63,11 +63,18 @@ uvicorn app.main:app --reload --port 8000
 - `GET /` — trạng thái, `ltid`, số giao dịch.
 - `GET /api/config` — `eu/cu/inv`, `f/minae` mặc định.
 - `GET /api/transactions` / `POST /api/transactions {tid?, items:[{item,qty}]}` — Pha 1.
+- `POST /api/items {item, eu, inv}` — đăng ký mục mới phát sinh trên luồng (ngoài a..f).
 - `POST /api/mine {f, minae}` — Pha 2+3, trả `{order, candidates, dhaeis}`.
 - `GET /api/results` — DHAEIs gần nhất.
 - `GET /api/dae-lists` — soi toàn bộ DAE-List (window + entries).
 - `POST /api/load-example` — nạp lại Bảng 1 (8 GD). `POST /api/reset` — xóa luồng.
 - `GET /api/example-stream` — luồng mẫu gốc.
+
+> Cập nhật theo PDF: `_join` chỉ ghép cùng tiền tố + `LTDAEUB` dừng sớm
+> (`STDAEUB(Px)` trừ dần tid lệch, kiểm tra cả sau vòng lặp);
+> `SMDAEUB` của pattern dài = Σ hiệu suất suy giảm (vd `{b,c}: smdaeub=0.5658 >= sdae=0.2829`);
+> `MAEUB` có điều kiện dừng sớm an toàn không đổi kết quả;
+> `miner` thread-safe (`RLock`), validate `f/minae/qty`, hỗ trợ item động.
 
 Ví dụ:
 
@@ -81,5 +88,6 @@ curl -X POST localhost:8000/api/transactions -H "Content-Type: application/json"
 
 ```bash
 python -m pytest tests -v
-# 4 tests: Sdae khớp PDF, SMDAEUB khớp PDF (±0.02), pruning + DHAEIs, streaming không quét lại.
+# 7 tests: Sdae khớp PDF, SMDAEUB khớp PDF (±0.02), pruning + DHAEIs,
+# streaming không quét lại, join tiền tố + LTDAEUB, Sdae({b,c}) HAEI, item động + validate.
 ```

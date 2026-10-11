@@ -45,3 +45,49 @@ def test_streaming_construction_no_rescan():
     n_after = sum(len(n.entries) for n in m.nodes.values())
     assert n_after - n_before == 2  # chỉ thêm 2 entry, không quét lại
     assert m.ltid == 9
+
+
+def test_join_requires_common_prefix_and_ltdaeub():
+    m = HAEIMDampedMiner(eu=EU, inv_table=INV)
+    m.load_example_stream()
+    cands = m.restructure(f=0.8, minae=0.2)
+    by_pat = {tuple(n.pattern): n for n in cands}
+    # PDF Ví dụ 5: {b}x{c} hợp lệ, LTDAEUB = STDAEUB(b) vì mọi tid(b) đều có c
+    bc = m._join(by_pat[("b",)], by_pat[("c",)], 0.8, m.ltid, 0.2)
+    assert bc is not None and tuple(sorted(bc.pattern)) == ("b", "c")
+    # SMDAEUB của pattern dài là chặn trên hiệu suất (>= Sdae), không gán bằng Sdae
+    assert bc.smdaeub >= bc.sdae
+    # khác độ dài -> từ chối ghép (đúng tiền tố)
+    assert m._join(bc, by_pat[("c",)], 0.8, m.ltid, 0.2) is None
+    # LTDAEUB quá cao -> dừng sớm
+    assert m._join(by_pat[("b",)], by_pat[("c",)], 0.8, m.ltid, 99.0) is None
+
+
+def test_join_bc_sdae_still_haei():
+    m = HAEIMDampedMiner(eu=EU, inv_table=INV)
+    m.load_example_stream()
+    cands = m.restructure(f=0.8, minae=0.2)
+    by_pat = {tuple(n.pattern): n for n in cands}
+    bc = m._join(by_pat[("b",)], by_pat[("c",)], 0.8, m.ltid, 0.2)
+    assert bc is not None
+    # Công thức trung bình u/(Inv*|X|): Sdae({b,c}) ~ 0.2829 > 0.2 -> HAEI
+    # (PDF ghi 0.2047 do ảnh công thức PI/PU bị mất; cùng kết luận HAEI)
+    assert bc.sdae >= 0.2
+
+
+def test_dynamic_item_and_validation():
+    m = HAEIMDampedMiner(eu=EU, inv_table=INV)
+    m.load_example_stream()
+    try:
+        m.construction(9, [("z", 1)])
+        assert False, "phải từ chối item chưa đăng ký"
+    except KeyError:
+        pass
+    m.register_item("z", eu=5.0, inv=60.0)
+    m.construction(9, [("z", 2)])
+    assert m.ltid == 9
+    try:
+        m.restructure(f=1.5, minae=0.2)
+        assert False, "phải từ chối f ngoài (0,1)"
+    except ValueError:
+        pass
