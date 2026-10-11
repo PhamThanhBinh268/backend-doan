@@ -91,3 +91,50 @@ def test_dynamic_item_and_validation():
         assert False, "phải từ chối f ngoài (0,1)"
     except ValueError:
         pass
+
+
+def test_mine_cache_and_stats():
+    m = HAEIMDampedMiner(eu=EU, inv_table=INV)
+    m.load_example_stream()
+    out1 = m.mine(f=0.8, minae=0.2)
+    assert out1.get("cached") is False
+    assert "stats" in out1 and out1["stats"]["dhaeis"] == len(out1["dhaeis"])
+    out2 = m.mine(f=0.8, minae=0.2)
+    assert out2.get("cached") is True
+    assert out2["dhaeis"] == out1["dhaeis"] and out2["order"] == out1["order"]
+    # luồng đổi -> cache miss
+    m.construction(9, [("a", 1)])
+    out3 = m.mine(f=0.8, minae=0.2)
+    assert out3.get("cached") is False
+    assert out3["ltid"] == 9
+
+
+def test_bulk_construction_equivalent():
+    from app.core.data import EXAMPLE_STREAM
+    m1 = HAEIMDampedMiner(eu=EU, inv_table=INV)
+    m1.load_example_stream()
+    ref = m1.mine(f=0.8, minae=0.2)
+    m2 = HAEIMDampedMiner(eu=EU, inv_table=INV)
+    batch = [(tid, [(i, q) for i, q in EXAMPLE_STREAM[tid]]) for tid in sorted(EXAMPLE_STREAM)]
+    m2.bulk_construction(batch)
+    got = m2.mine(f=0.8, minae=0.2)
+    assert got["order"] == ref["order"]
+    assert sorted([tuple(sorted(r["pattern"])) for r in got["dhaeis"]]) == \
+        sorted([tuple(sorted(r["pattern"])) for r in ref["dhaeis"]])
+
+
+def test_out_of_order_tids_two_pointer_join():
+    m = HAEIMDampedMiner(eu=EU, inv_table=INV)
+    # thêm tid lộn xộn: entries không còn append theo thứ tự
+    m.construction(5, [("a", 1), ("b", 1)])
+    m.construction(2, [("a", 1), ("b", 2), ("c", 1)])
+    m.construction(8, [("b", 1), ("c", 1)])
+    cands = m.restructure(f=0.8, minae=0.0)
+    by_pat = {tuple(n.pattern): n for n in cands}
+    assert ("a",) in by_pat and ("b",) in by_pat
+    joined = m._join(by_pat[("a",)], by_pat[("b",)], 0.8, m.ltid, 0.0)
+    assert joined is not None
+    # tid chung của a,b là {2,5} (b còn tid 8 không có a)
+    assert sorted(e.tid for e in joined.entries) == [2, 5]
+    # entries singleton đã được sort theo tid tại restructure
+    assert [e.tid for e in by_pat[("a",)].entries] == sorted(e.tid for e in by_pat[("a",)].entries)

@@ -73,6 +73,12 @@
         <button onclick="addTx()">Thêm (Construction)</button>
       </div>
       <small class="hint">Mặc định a..f theo Bảng 2. Item mới cần đăng ký ở mục 1 trước khi thêm.</small>
+      <h3 style="font-size:14px">Nạp hàng loạt (bulk)</h3>
+      <div class="row">
+        <textarea id="bulkText" rows="2" style="flex:1;min-width:220px" placeholder='[{"items":[{"item":"a","qty":1}]},{"tid":10,"items":[{"item":"b","qty":2}]}]'></textarea>
+        <button class="ghost" onclick="addBulk()">Nạp bulk</button>
+      </div>
+      <small class="hint">1 request cho nhiều T_j (tid trống = tự tăng).</small>
     </div>
     <div class="card">
       <h2>3. Khai thác — Pha 2 + 3 (Restructure + Expansion)</h2>
@@ -160,7 +166,8 @@ async function mine() {
     const f = Number(document.getElementById("f").value);
     const minae = Number(document.getElementById("minae").value);
     const r = await jpost("/api/mine", { f, minae });
-    let h = `<p>Thứ tự sau Restructure (tăng dần SMDAEUB): <b class="mono">[${r.order.join(", ")}]</b> | Ltid=${r.ltid}</p>`;
+    const st = r.stats ? ` | ${r.stats.elapsed_ms}ms joins ${r.stats.join_success}/${r.stats.join_attempts}${r.cached ? " (cache)" : ""}` : (r.cached ? " (cache)" : "");
+    let h = `<p>Thứ tự sau Restructure (tăng dần SMDAEUB): <b class="mono">[${r.order.join(", ")}]</b> | Ltid=${r.ltid}${st}</p>`;
     h += `<h3 style="font-size:14px">Ứng viên sau lọc SMDAEUB</h3><table><tr><th>pattern</th><th>Sdae</th><th>SMDAEUB</th><th>STDAEUB</th><th>KL</th></tr>`;
     for (const c of r.candidates) {
       const keep = c.stdaeub >= minae ? '<span class="ok">mở rộng</span>' : '<span class="warn">cắt</span>';
@@ -201,6 +208,14 @@ async function resetAll() {
 }
 async function loadExample() {
   try { const r = await jpost("/api/load-example", {}); log(`POST load-example ok: ${r.loaded} GD`); loadTx(); loadStatus(); } catch (e) { log("LỖI example: " + e.message); }
+}
+async function addBulk() {
+  try {
+    const arr = JSON.parse(document.getElementById("bulkText").value || "[]");
+    const r = await jpost("/api/transactions/bulk", { transactions: arr });
+    log(`POST bulk ok: ${r.loaded} GD, tids=${r.tids}`);
+    loadTx(); loadStatus();
+  } catch (e) { log("LỖI bulk: " + e.message); }
 }
 async function addItem() {
   try {

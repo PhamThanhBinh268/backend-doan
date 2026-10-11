@@ -60,11 +60,12 @@ uvicorn app.main:app --reload --port 8000
 
 ## 3. API
 
-- `GET /` — trạng thái, `ltid`, số giao dịch.
+- `GET /` — trạng thái, `ltid`, số giao dịch, `version`, `last_stats`.
 - `GET /api/config` — `eu/cu/inv`, `f/minae` mặc định.
 - `GET /api/transactions` / `POST /api/transactions {tid?, items:[{item,qty}]}` — Pha 1.
+- `POST /api/transactions/bulk {transactions:[...]}` — nạp hàng loạt 1 request.
 - `POST /api/items {item, eu, inv}` — đăng ký mục mới phát sinh trên luồng (ngoài a..f).
-- `POST /api/mine {f, minae}` — Pha 2+3, trả `{order, candidates, dhaeis}`.
+- `POST /api/mine {f, minae}` — Pha 2+3, trả `{order, candidates, dhaeis, stats, cached}`.
 - `GET /api/results` — DHAEIs gần nhất.
 - `GET /api/dae-lists` — soi toàn bộ DAE-List (window + entries).
 - `POST /api/load-example` — nạp lại Bảng 1 (8 GD). `POST /api/reset` — xóa luồng.
@@ -75,6 +76,17 @@ uvicorn app.main:app --reload --port 8000
 > `SMDAEUB` của pattern dài = Σ hiệu suất suy giảm (vd `{b,c}: smdaeub=0.5658 >= sdae=0.2829`);
 > `MAEUB` có điều kiện dừng sớm an toàn không đổi kết quả;
 > `miner` thread-safe (`RLock`), validate `f/minae/qty`, hỗ trợ item động.
+
+### Tối ưu (giữ nguyên kết quả số học PDF)
+
+- Pha 1: sort Tj giảm dần tiện ích **1 lần/GD** tái dùng cho mọi item
+  (thay vì sort lại mỗi item); dừng sớm MAEUB bằng max hậu tố O(1).
+- Pha 2+3: tiền tính bảng `w(tid)=f^(ltid-tid)` **1 lần/mine** + tập item từng tid,
+  tra O(1) thay vì `**` và `set()` lặp lại cho mỗi entry.
+- Ghép: 2 con trỏ thật trên tidList đã sort (đúng mô tả PDF), 1 pass vừa tìm
+  tid chung vừa trừ `LTDAEUB` — không tạo dict/set trung gian.
+- `mine` có cache theo `(f, minae, ltid, số GD, version)` + `stats`
+  (`elapsed_ms`, `join_attempts/success`, `pruned_stdaeub`) để poll UI không chạy lại vô ích.
 
 Ví dụ:
 
@@ -88,6 +100,7 @@ curl -X POST localhost:8000/api/transactions -H "Content-Type: application/json"
 
 ```bash
 python -m pytest tests -v
-# 7 tests: Sdae khớp PDF, SMDAEUB khớp PDF (±0.02), pruning + DHAEIs,
-# streaming không quét lại, join tiền tố + LTDAEUB, Sdae({b,c}) HAEI, item động + validate.
+# 10 tests: Sdae khớp PDF, SMDAEUB khớp PDF (±0.02), pruning + DHAEIs,
+# streaming không quét lại, join tiền tố + LTDAEUB, Sdae({b,c}) HAEI, item động + validate,
+# mine cache + stats, bulk tương đương single, tid lộn xộn + two-pointer join.
 ```
