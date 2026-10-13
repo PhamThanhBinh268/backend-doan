@@ -45,40 +45,65 @@ f^(Ltid-tid) phụ thuộc Ltid thay đổi liên tục — suy giảm chỉ áp
 
 from __future__ import annotations
 
+import copy
 import threading
+import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+
+from .data import EXAMPLE_STREAM
+
+__all__ = ["DAEEntry", "DAENode", "HAEIMDampedMiner"]
+
+_ROUND_DIGITS = 4
 
 
-@dataclass
+def _round4(x: float) -> float:
+    return round(float(x), _ROUND_DIGITS)
+
+
+def _validate_decay(f: float) -> float:
+    f = float(f)
+    if not 0.0 < f < 1.0:
+        raise ValueError("f phải thỏa 0<f<1 (PDF §1)")
+    return f
+
+
+def _validate_minae(minae: float) -> float:
+    minae = float(minae)
+    if minae < 0:
+        raise ValueError("minae phải >= 0")
+    return minae
+
+
+@dataclass(slots=True)
 class DAEEntry:
     """Entry cấp giao dịch trong một node DAE-List."""
 
     tid: int
     u: float = 0.0            # tiện ích của pattern trong giao dịch
-    ae: float = 0.0            # hiệu suất trung bình THÔ (chưa suy giảm)
-    maeub: float = 0.0         # cận trên MAEUB THÔ (chưa suy giảm)
-    pu: float = 0.0            # tiện ích tiền tố chung (khi ghép)
+    ae: float = 0.0           # hiệu suất trung bình THÔ (chưa suy giảm)
+    maeub: float = 0.0        # cận trên MAEUB THÔ (chưa suy giảm)
+    pu: float = 0.0           # tiện ích tiền tố chung (khi ghép)
     # --- điền tại Restructure (sau khi biết Ltid, thứ tự sắp xếp) ---
-    dae: float = 0.0           # ae * f^(Ltid-tid)
-    mdaeub: float = 0.0        # maeub * f^(Ltid-tid)
-    maxru: float = 0.0         # tiện ích còn lại lớn nhất sau pattern
-    min_inv: float = 0.0       # chi phí đầu tư nhỏ nhất còn lại sau pattern
+    dae: float = 0.0          # ae * f^(Ltid-tid)
+    mdaeub: float = 0.0       # maeub * f^(Ltid-tid)
+    maxru: float = 0.0        # tiện ích còn lại lớn nhất sau pattern
+    min_inv: float = 0.0      # chi phí đầu tư nhỏ nhất còn lại sau pattern
     k: int = 0                # số mục còn lại sau pattern
-    tdaeub: float = 0.0        # cận trên chặt TDAEUB đã nhân suy giảm
+    tdaeub: float = 0.0       # cận trên chặt TDAEUB đã nhân suy giảm
 
 
-@dataclass
+@dataclass(slots=True)
 class DAENode:
     """Node cấp cửa sổ — một pattern/tập mục."""
 
-    pattern: Tuple[str, ...]
-    inv: float = 0.0           # Inv(X) = sum INV[i]
-    pi: float = 0.0            # PI: đầu tư của tiền tố chung (khi ghép)
+    pattern: tuple[str, ...]
+    inv: float = 0.0          # Inv(X) = sum INV[i]
+    pi: float = 0.0           # PI: đầu tư của tiền tố chung (khi ghép)
     sdae: float = 0.0
     smdaeub: float = 0.0
     stdaeub: float = 0.0
-    entries: List[DAEEntry] = field(default_factory=list)
+    entries: list[DAEEntry] = field(default_factory=list)
 
     @property
     def name(self) -> str:
@@ -88,46 +113,50 @@ class DAENode:
 class HAEIMDampedMiner:
     """Miner streaming HAEIM_Damped với đầy đủ 3 pha."""
 
-    def __init__(self, eu: Dict[str, float], inv_table: Dict[str, float]):
+    def __init__(self, eu: dict[str, float], inv_table: dict[str, float]):
         self.eu = dict(eu)
         self.inv_table = dict(inv_table)
         # transactions: tid -> {item: qty}
-        self.transactions: Dict[int, Dict[str, float]] = {}
+        self.transactions: dict[int, dict[str, float]] = {}
         # DAE-List toàn cục cho singleton (pha Construction tích lũy ở đây)
-        self.nodes: Dict[Tuple[str, ...], DAENode] = {}
+        self.nodes: dict[tuple[str, ...], DAENode] = {}
         # thứ tự toàn phần sau Restructure (tăng dần SMDAEUB) — dùng cho Expansion
-        self.order: List[str] = []
-        self.order_index: Dict[str, int] = {}
+        self.order: list[str] = []
+        self.order_index: dict[str, int] = {}
         # kết quả khai thác gần nhất
-        self.results: List[Dict] = []
+        self.results: list[dict] = []
         self._lock = threading.RLock()
         # --- tối ưu: version + cache mine ---
         # _version tăng mỗi khi luồng đổi (construction/register/reset/load),
         # dùng làm 1 phần cache-key để mine lặp lại không chạy lại vô ích.
         self._version: int = 0
-        self._mine_cache: Dict | None = None
-        self._mine_cache_key: Tuple | None = None
-        self.last_stats: Dict = {}
+        self._mine_cache: dict | None = None
+        self._mine_cache_key: tuple | None = None
+        self.last_stats: dict = {}
 
     def register_item(self, item: str, eu: float, inv: float) -> None:
         """Đăng ký item mới xuất hiện trên luồng (mở rộng ngoài a..f của PDF).
 
         PDF cố định 6 mục Bảng 2; luồng thực tế có thể phát sinh mục mới.
         """
+        item = str(item).strip()
+        if not item:
+            raise ValueError("item rỗng")
+        if float(eu) <= 0 or float(inv) <= 0:
+            raise ValueError("eu/inv phải > 0")
         with self._lock:
-            if eu <= 0 or inv <= 0:
-                raise ValueError("eu/inv phải > 0")
             self.eu[item] = float(eu)
             self.inv_table[item] = float(inv)
             self._version += 1
             self._mine_cache = None
+            self._mine_cache_key = None
 
     # ------------------------------------------------------------------ utils
-    def utility_of(self, pattern: Tuple[str, ...], tid: int) -> float:
+    def utility_of(self, pattern: tuple[str, ...], tid: int) -> float:
         t = self.transactions.get(tid, {})
         return sum(t.get(i, 0.0) * self.eu.get(i, 0.0) for i in pattern)
 
-    def inv_of(self, pattern: Tuple[str, ...]) -> float:
+    def inv_of(self, pattern: tuple[str, ...]) -> float:
         return sum(self.inv_table.get(i, 0.0) for i in pattern)
 
     def item_utility_in(self, item: str, tid: int) -> float:
@@ -137,7 +166,7 @@ class HAEIMDampedMiner:
     def ltid(self) -> int:
         return max(self.transactions.keys()) if self.transactions else 0
 
-    def _decay_weights(self, f: float, ltid: int) -> Dict[int, float]:
+    def _decay_weights(self, f: float, ltid: int) -> dict[int, float]:
         """Tiền tính bảng trọng số suy giảm w(tid) = f^(ltid-tid) — tối ưu.
 
         Thay vì gọi `f ** (ltid-tid)` cho mỗi entry (mỗi node lặp lại phép `**`
@@ -146,8 +175,75 @@ class HAEIMDampedMiner:
         """
         return {tid: (f ** (ltid - tid)) for tid in self.transactions}
 
+    @staticmethod
+    def _resolve_weight(
+        e: DAEEntry, f: float, ltid: int,
+        weights: dict[int, float] | None = None,
+        w: float | None = None,
+    ) -> float:
+        if w is not None:
+            return w
+        if weights is not None:
+            return weights.get(e.tid, 0.0)
+        return (f ** (ltid - e.tid)) if ltid >= e.tid else 0.0
+
+    def _clear_locked(self) -> None:
+        """Xóa toàn bộ trạng thái luồng (gọi khi đã giữ lock)."""
+        self.transactions.clear()
+        self.nodes.clear()
+        self.order = []
+        self.order_index = {}
+        self.results = []
+        self._mine_cache = None
+        self._mine_cache_key = None
+        self.last_stats = {}
+
     # ------------------------------------------------- PHA 1: CONSTRUCTION
-    def construction(self, tid: int, items: List[Tuple[str, float]]) -> None:
+    def _construct_locked(self, tid: int, items: list[tuple[str, float]]) -> None:
+        """Ghi một giao dịch khi đã giữ lock (không đụng version/cache).
+
+        Tách riêng để `construction` (lẻ) và `bulk_construction` (lô) dùng chung
+        một đường code duy nhất — tránh lệch logic.
+        """
+        if not isinstance(tid, int) or tid <= 0:
+            raise ValueError(f"tid phải là số nguyên > 0, nhận {tid!r}")
+        tmap: dict[str, float] = {}
+        for item, qty in items:
+            if item not in self.eu or item not in self.inv_table:
+                raise KeyError(f"item '{item}' chưa đăng ký EU/INV")
+            if float(qty) <= 0:
+                raise ValueError("qty phải > 0")
+            tmap[item] = tmap.get(item, 0.0) + float(qty)
+        if not tmap:
+            raise ValueError("Transaction rỗng")
+        if tid in self.transactions:
+            raise ValueError(f"tid {tid} đã tồn tại")
+        self.transactions[tid] = tmap
+
+        # tiền tính 1 lần: utility từng item + thứ tự giảm dần tiện ích
+        util_map = {it: q * self.eu[it] for it, q in tmap.items()}
+        scored = sorted(
+            ((util_map[it], it) for it in tmap),
+            key=lambda x: (-x[0], x[1]),
+        )
+        pos_of = {it: k for k, (_, it) in enumerate(scored)}
+
+        for item in tmap:
+            key = (item,)
+            node = self.nodes.get(key)
+            if node is None:
+                node = DAENode(pattern=key, inv=self.inv_of(key))
+                self.nodes[key] = node
+            u = util_map[item]
+            ae = (u / (node.inv * len(key))) if node.inv else 0.0  # Công thức 5: u/(Inv*|X|)
+            maeub = self._maeub_singleton_raw(
+                item, tid, u, ae, scored=scored, pos_of=pos_of, util_map=util_map,
+            )
+            node.entries.append(
+                DAEEntry(tid=tid, u=u, ae=ae, maeub=maeub, pu=0.0)
+            )
+
+    def construction(self, tid: int, items: list[tuple[str, float]]) -> None:
         """Xử lý một giao dịch mới T_j: ghi u/ae/MAEUB thô cho từng singleton.
 
         Đúng PDF: chi phí O(|T_j|), không quét lại dữ liệu cũ; maxru/k để trống
@@ -158,42 +254,10 @@ class HAEIMDampedMiner:
         Kết quả số học giống hệt bản sort-lặp.
         """
         with self._lock:
-            tmap: Dict[str, float] = {}
-            for item, qty in items:
-                if item not in self.eu or item not in self.inv_table:
-                    raise KeyError(f"item '{item}' chưa đăng ký EU/INV")
-                if float(qty) <= 0:
-                    raise ValueError("qty phải > 0")
-                tmap[item] = tmap.get(item, 0.0) + float(qty)
-            if not tmap:
-                raise ValueError("Transaction rỗng")
-            self.transactions[tid] = tmap
+            self._construct_locked(tid, items)
             self._version += 1
             self._mine_cache = None
             self._mine_cache_key = None
-
-            # tiền tính 1 lần: utility từng item + thứ tự giảm dần tiện ích
-            util_map = {it: q * self.eu[it] for it, q in tmap.items()}
-            scored = sorted(
-                ((util_map[it], it) for it in tmap),
-                key=lambda x: (-x[0], x[1]),
-            )
-            pos_of = {it: k for k, (_, it) in enumerate(scored)}
-
-            for item in tmap:
-                key = (item,)
-                node = self.nodes.get(key)
-                if node is None:
-                    node = DAENode(pattern=key, inv=self.inv_of(key))
-                    self.nodes[key] = node
-                u = util_map[item]
-                ae = (u / (node.inv * len(key))) if node.inv else 0.0  # Công thức 5: u/(Inv*|X|)
-                maeub = self._maeub_singleton_raw(
-                    item, tid, u, ae, scored=scored, pos_of=pos_of, util_map=util_map,
-                )
-                node.entries.append(
-                    DAEEntry(tid=tid, u=u, ae=ae, maeub=maeub, pu=0.0)
-                )
 
     def _maeub_singleton_raw(
         self,
@@ -201,9 +265,9 @@ class HAEIMDampedMiner:
         tid: int,
         u: float,
         ae: float,
-        scored: List[Tuple[float, str]] | None = None,
-        pos_of: Dict[str, int] | None = None,
-        util_map: Dict[str, float] | None = None,
+        scored: list[tuple[float, str]] | None = None,
+        pos_of: dict[str, int] | None = None,
+        util_map: dict[str, float] | None = None,
     ) -> float:
         """MAEUB thô cho singleton bằng greedy giảm dần tiện ích.
 
@@ -221,37 +285,32 @@ class HAEIMDampedMiner:
         """
         if scored is None or util_map is None:
             # fallback tương thích: tự tính khi gọi lẻ (không qua construction)
-            tmap = self.transactions[tid]
+            tmap = self.transactions.get(tid, {})
             util_map = {it: self.item_utility_in(it, tid) for it in tmap}
             scored = sorted(
                 ((util_map[it], it) for it in tmap),
                 key=lambda x: (-x[0], x[1]),
             )
-            pos = next((k for k, (_, it) in enumerate(scored) if it == item), None)
-        else:
-            pos = pos_of.get(item) if pos_of is not None else next(
-                (k for k, (_, it) in enumerate(scored) if it == item), None
-            )
+            pos_of = {it: k for k, (_, it) in enumerate(scored)}
+        pos = pos_of.get(item) if pos_of is not None else None
         if pos is None:
             return ae
         best = ae
         cur_u = u
         cur_inv = self.inv_table.get(item, 0.0)
         # hiệu suất đơn của từng mục phía sau — dùng cho điều kiện dừng
-        suffix_utils = [util for util, _ in scored[pos + 1:]]
         suffix_items = [it for _, it in scored[pos + 1:]]
-        suffix_single_eff = []
-        for util, it in zip(suffix_utils, suffix_items):
+        suffix_single_eff: list[float] = []
+        for it in suffix_items:
             inv = self.inv_table.get(it, 0.0)
-            suffix_single_eff.append((util / inv) if inv > 0 else 0.0)
+            suffix_single_eff.append((util_map[it] / inv) if inv > 0 else 0.0)
         # max hậu tố để dừng sớm O(1) mỗi bước (thay vì max() quét lại O(n))
         suffix_max = [0.0] * (len(suffix_single_eff) + 1)
         for k in range(len(suffix_single_eff) - 1, -1, -1):
             suffix_max[k] = suffix_single_eff[k] if suffix_single_eff[k] > suffix_max[k + 1] else suffix_max[k + 1]
         # greedy: lần lượt thêm từng mục phía sau (dùng util_map có sẵn)
-        um = util_map if util_map is not None else {}
         for idx, nxt in enumerate(suffix_items):
-            cur_u += um[nxt] if nxt in um else self.item_utility_in(nxt, tid)
+            cur_u += util_map.get(nxt, 0.0)
             cur_inv += self.inv_table.get(nxt, 0.0)
             if cur_inv <= 0:
                 continue
@@ -266,15 +325,13 @@ class HAEIMDampedMiner:
         return best
 
     # ------------------------------------------------- PHA 2: RESTRUCTURE
-    def restructure(self, f: float, minae: float) -> List[DAENode]:
+    def restructure(self, f: float, minae: float) -> list[DAENode]:
         """Áp suy giảm, lọc SMDAEUB, sắp xếp, tính Sdae/TDAEUB/STDAEUB.
 
         Trả về danh sách DAE-List ứng viên đã sắp xếp tăng dần SMDAEUB.
         """
-        if not (0 < f < 1):
-            raise ValueError("f phải thỏa 0<f<1 (PDF §1)")
-        if minae < 0:
-            raise ValueError("minae phải >= 0")
+        f = _validate_decay(f)
+        minae = _validate_minae(minae)
         with self._lock:
             ltid = self.ltid
             # Tối ưu: tiền tính bảng trọng số 1 lần (thay vì ** cho mỗi entry),
@@ -294,8 +351,8 @@ class HAEIMDampedMiner:
                     smdaeub += e.mdaeub
                 node.sdae = sdae
                 node.smdaeub = smdaeub
-            # 2. lọc sớm SMDAEUB < minae
-            candidates = [n for n in self.nodes.values() if n.smdaeub >= minae and len(n.pattern) == 1]
+            # 2. lọc sớm SMDAEUB < minae (nodes chỉ chứa singleton)
+            candidates = [n for n in self.nodes.values() if n.smdaeub >= minae]
             # 3. sắp xếp tăng dần SMDAEUB — thứ tự dùng cho Expansion
             candidates.sort(key=lambda n: (n.smdaeub, n.pattern))
             self.order = [n.pattern[0] for n in candidates]
@@ -315,8 +372,8 @@ class HAEIMDampedMiner:
         e: DAEEntry,
         f: float,
         ltid: int,
-        weights: Dict[int, float] | None = None,
-        tx_sets: Dict[int, set] | None = None,
+        weights: dict[int, float] | None = None,
+        tx_sets: dict[int, set] | None = None,
     ) -> None:
         """Tính maxru/minInv/k và TDAEUB cho một entry (sau khi có thứ tự).
 
@@ -332,23 +389,25 @@ class HAEIMDampedMiner:
             if tset is None:
                 tset = set(self.transactions.get(e.tid, {}))
         else:
-            tmap = self.transactions.get(e.tid, {})
-            tset = set(tmap)
+            tset = set(self.transactions.get(e.tid, {}))
         tmap = self.transactions.get(e.tid, {})
         if len(node.pattern) == 1:
-            idx = self.order_index.get(node.pattern[0], -1)
+            idx: int | None = self.order_index.get(node.pattern[0])
         else:
             last = node.pattern[-1] if node.pattern else None
-            idx = self.order_index.get(last, 999) if last else 999
+            idx = self.order_index.get(last) if last else None
             # pattern dài chứa item ngoài order (đã bị lọc) -> không còn remaining
-            if idx >= 999:
+            if idx is None:
                 e.k = 0
                 e.maxru = 0.0
                 e.min_inv = 0.0
                 e.tdaeub = self.tight_upper_bound(node, e, f, ltid, weights=weights)
                 return
-        # các mục còn lại phía sau trong thứ tự đã sắp xếp và có mặt trong Tj
-        remaining = [it for it in self.order[idx + 1:] if it in tset] if idx >= 0 else []
+        if idx is None:
+            remaining: list[str] = []
+        else:
+            # các mục còn lại phía sau trong thứ tự đã sắp xếp và có mặt trong Tj
+            remaining = [it for it in self.order[idx + 1:] if it in tset]
         e.k = len(remaining)
         if not remaining:
             e.maxru = 0.0
@@ -358,7 +417,7 @@ class HAEIMDampedMiner:
             eu = self.eu
             invt = self.inv_table
             best_u = 0.0
-            best_inv = None
+            best_inv: float | None = None
             for it in remaining:
                 uu = tmap.get(it, 0.0) * eu.get(it, 0.0)
                 if uu > best_u:
@@ -376,7 +435,7 @@ class HAEIMDampedMiner:
         e: DAEEntry,
         f: float,
         ltid: int,
-        weights: Dict[int, float] | None = None,
+        weights: dict[int, float] | None = None,
         w: float | None = None,
     ) -> float:
         """TDAEUB theo 3 trường hợp (semantics PDF § Pha 2 bước 4).
@@ -388,8 +447,7 @@ class HAEIMDampedMiner:
           dài hơn vì |Y|>=|X|+1. VD order a<b<c: STDAEUB(a)~0.17<0.2 (cắt),
           STDAEUB(b)~0.28>=0.2 (mở rộng {b}x{c}), STDAEUB(c)=0.
         """
-        if w is None:
-            w = weights.get(e.tid, 0.0) if weights is not None else ((f ** (ltid - e.tid)) if ltid >= e.tid else 0.0)
+        w = HAEIMDampedMiner._resolve_weight(e, f, ltid, weights, w)
         if e.k == 0:
             return 0.0
         if e.maxru <= 0 or e.min_inv <= 0 or node.inv <= 0:
@@ -400,12 +458,12 @@ class HAEIMDampedMiner:
     # ------------------------------------------------- PHA 3: EXPANSION
     def expansion(
         self,
-        candidates: List[DAENode],
+        candidates: list[DAENode],
         f: float,
         minae: float,
-        weights: Dict[int, float] | None = None,
-        _stats: Dict | None = None,
-    ) -> List[Dict]:
+        weights: dict[int, float] | None = None,
+        _stats: dict | None = None,
+    ) -> list[dict]:
         """DFS đệ quy sinh pattern dài hơn từ các DAE-List đã lọc & sắp xếp.
 
         Đúng PDF § Pha 3:
@@ -417,10 +475,9 @@ class HAEIMDampedMiner:
         Tối ưu: tái dùng bảng `weights` tiền tính; gom thống kê vào `_stats`
         (số lần ghép, thành công, cắt LTDAEUB) để báo cáo mà không tốn thêm pass.
         """
-        if minae < 0:
-            raise ValueError("minae phải >= 0")
+        minae = _validate_minae(minae)
         with self._lock:
-            results: List[Dict] = []
+            results: list[dict] = []
             ltid = self.ltid
             if weights is None:
                 weights = self._decay_weights(f, ltid)
@@ -428,15 +485,16 @@ class HAEIMDampedMiner:
             stats = _stats if _stats is not None else {}
             stats["join_attempts"] = stats.get("join_attempts", 0)
             stats["join_success"] = stats.get("join_success", 0)
+            stats.setdefault("pruned_stdaeub", 0)
 
             def emit(node: DAENode) -> None:
                 if node.sdae >= minae:
                     results.append(
-                        {"pattern": list(node.pattern), "sdae": round(node.sdae, 4),
-                         "smdaeub": round(node.smdaeub, 4), "stdaeub": round(node.stdaeub, 4)}
+                        {"pattern": list(node.pattern), "sdae": _round4(node.sdae),
+                         "smdaeub": _round4(node.smdaeub), "stdaeub": _round4(node.stdaeub)}
                     )
 
-            def dfs(node: DAENode, cond: List[DAENode]) -> None:
+            def dfs(node: DAENode, cond: list[DAENode]) -> None:
                 emit(node)
                 if node.stdaeub < minae:
                     stats["pruned_stdaeub"] = stats.get("pruned_stdaeub", 0) + 1
@@ -452,10 +510,11 @@ class HAEIMDampedMiner:
             # root: mỗi singleton làm gốc, cond = các singleton đứng sau nó
             for i, node in enumerate(candidates):
                 dfs(node, candidates[i + 1:])
-            # khử trùng lặp (giữ Sdae lớn nhất)
-            uniq: Dict[Tuple[str, ...], Dict] = {}
+            # khử trùng lặp (giữ Sdae lớn nhất); pattern đã chuẩn tắc theo order
+            # nên key chuẩn là tuple(pattern), không sort lại kiểu từ điển.
+            uniq: dict[tuple[str, ...], dict] = {}
             for r in results:
-                k = tuple(sorted(r["pattern"]))
+                k = tuple(r["pattern"])
                 if k not in uniq or r["sdae"] > uniq[k]["sdae"]:
                     uniq[k] = r
             self.results = sorted(uniq.values(), key=lambda r: (len(r["pattern"]), r["pattern"]))
@@ -468,8 +527,8 @@ class HAEIMDampedMiner:
         f: float,
         ltid: int,
         minae: float,
-        weights: Dict[int, float] | None = None,
-        tx_sets: Dict[int, set] | None = None,
+        weights: dict[int, float] | None = None,
+        tx_sets: dict[int, set] | None = None,
     ) -> DAENode | None:
         """Ghép 2 DAE-List cùng tiền tố tạo pattern mới Pxy (2 con trỏ trên tidList).
 
@@ -496,7 +555,7 @@ class HAEIMDampedMiner:
             return None
         # pattern mới: giữ thứ tự order để remaining/TDAEUB nhất quán
         new_items = sorted(set(px.pattern) | set(py.pattern),
-                           key=lambda it: (self.order_index.get(it, 999), it))
+                           key=lambda it: (self.order_index.get(it, 9999), it))
         # ghép cùng độ dài mà không sinh mục mới (trùng nhau) -> bỏ
         if len(new_items) != len(px.pattern) + 1:
             return None
@@ -516,7 +575,7 @@ class HAEIMDampedMiner:
         # 1 pass 2 con trỏ: i trên Px, j trên Py (entries đã sort theo tid)
         i = j = 0
         ltdaeub = px.stdaeub
-        common_pairs: List[Tuple[DAEEntry, DAEEntry]] = []
+        common_pairs: list[tuple[DAEEntry, DAEEntry]] = []
         while i < len(xe) and j < len(ye):
             ti, tj = xe[i].tid, ye[j].tid
             if ti == tj:
@@ -546,35 +605,20 @@ class HAEIMDampedMiner:
         sdae = 0.0
         smdaeub = 0.0
         plen = len(new_pattern)
-        if prefix:
-            for ex, ey in common_pairs:
-                tid = ex.tid
-                pu = self.utility_of(prefix, tid)
-                u = ex.u + ey.u - pu
-                ae = u / (new_inv * plen) if new_inv and plen else 0.0
-                eff = u / new_inv if new_inv else 0.0
-                w = weights.get(tid, 0.0)
-                dae = ae * w
-                mdaeub = eff * w
-                sdae += dae
-                smdaeub += mdaeub
-                node.entries.append(
-                    DAEEntry(tid=tid, u=u, ae=ae, maeub=eff, pu=pu, dae=dae, mdaeub=mdaeub)
-                )
-        else:
-            for ex, ey in common_pairs:
-                tid = ex.tid
-                u = ex.u + ey.u
-                ae = u / (new_inv * plen) if new_inv and plen else 0.0
-                eff = u / new_inv if new_inv else 0.0
-                w = weights.get(tid, 0.0)
-                dae = ae * w
-                mdaeub = eff * w
-                sdae += dae
-                smdaeub += mdaeub
-                node.entries.append(
-                    DAEEntry(tid=tid, u=u, ae=ae, maeub=eff, pu=0.0, dae=dae, mdaeub=mdaeub)
-                )
+        for ex, ey in common_pairs:
+            tid = ex.tid
+            pu = self.utility_of(prefix, tid) if prefix else 0.0
+            u = ex.u + ey.u - pu
+            ae = u / (new_inv * plen) if new_inv and plen else 0.0
+            eff = u / new_inv if new_inv else 0.0
+            w = weights.get(tid, 0.0)
+            dae = ae * w
+            mdaeub = eff * w
+            sdae += dae
+            smdaeub += mdaeub
+            node.entries.append(
+                DAEEntry(tid=tid, u=u, ae=ae, maeub=eff, pu=pu, dae=dae, mdaeub=mdaeub)
+            )
         node.sdae = sdae
         node.smdaeub = smdaeub
         # tính maxru/minInv/k/TDAEUB cho node mới theo thứ tự hiện tại
@@ -587,46 +631,67 @@ class HAEIMDampedMiner:
         return node
 
     # ------------------------------------------------- tiện ích tổng hợp
-    def bulk_construction(self, batch: List[Tuple[int, List[Tuple[str, float]]]]) -> List[int]:
+    def bulk_construction(self, batch: list[tuple[int, list[tuple[str, float]]]]) -> list[int]:
         """Nạp hàng loạt nhiều giao dịch trong 1 lần gọi — tối ưu streaming.
 
-        Tương đương gọi `construction` cho từng tid, nhưng chỉ vô hiệu cache
-        mine 1 lần sau cùng và trả danh sách tid đã nạp. Dùng cho
-        `POST /api/transactions/bulk` để giảm round-trip.
+        Tương đương gọi `construction` cho từng tid, nhưng validate toàn lô
+        trước (atomic: lỗi 1 tid thì không ghi tid nào) và chỉ chạm cache 1 lần.
+        Dùng cho `POST /api/transactions/bulk` để giảm round-trip.
         """
         with self._lock:
-            tids: List[int] = []
-            # tạm gỡ vô hiệu cache từng lần: gọi construction nội bộ rồi
-            # version đã tăng từng lần là đúng; ở đây giữ nguyên semantics,
-            # chỉ gom kết quả. (Chi phí chính vẫn O(Σ|Tj|).)
+            if not batch:
+                raise ValueError("Danh sách rỗng")
+            # validate toàn lô trước khi ghi (atomic)
+            seen: set[int] = set()
             for tid, items in batch:
-                self.construction(tid, items)
+                if not isinstance(tid, int) or tid <= 0:
+                    raise ValueError(f"tid phải là số nguyên > 0, nhận {tid!r}")
+                if tid in seen:
+                    raise ValueError(f"tid {tid} lặp trong batch")
+                seen.add(tid)
+                if tid in self.transactions:
+                    raise ValueError(f"tid {tid} đã tồn tại")
+                if not items:
+                    raise ValueError("Transaction rỗng trong batch")
+                for item, qty in items:
+                    if item not in self.eu or item not in self.inv_table:
+                        raise KeyError(f"item '{item}' chưa đăng ký EU/INV")
+                    if float(qty) <= 0:
+                        raise ValueError("qty phải > 0")
+            tids: list[int] = []
+            for tid, items in batch:
+                self._construct_locked(tid, items)
                 tids.append(tid)
+            self._version += len(tids)
+            self._mine_cache = None
+            self._mine_cache_key = None
             return tids
 
-    def mine(self, f: float, minae: float) -> Dict:
+    def mine(self, f: float, minae: float) -> dict:
         """Chạy trọn Restructure + Expansion (giữ Construction đã tích lũy).
 
         Tối ưu: cache theo (f, minae, ltid, số GD, version luồng). Mine lặp lại
         với cùng tham số mà luồng không đổi sẽ trả cache O(1) kèm `cached: True`
         và `stats` lần chạy gốc — đúng cho frontend poll liên tục.
         """
-        import time
+        f = _validate_decay(f)
+        minae = _validate_minae(minae)
         with self._lock:
             if not self.transactions:
                 raise ValueError("Luồng rỗng")
             key = (round(float(f), 6), round(float(minae), 6), self.ltid,
                    len(self.transactions), self._version)
             if self._mine_cache_key == key and self._mine_cache is not None:
-                out = dict(self._mine_cache)
+                out = copy.deepcopy(self._mine_cache)
                 out["cached"] = True
                 return out
             t0 = time.perf_counter()
             # gọi nội bộ (RLock cho phép restructure/expansion lồng nhau)
             cands = self.restructure(f, minae)
-            stats: Dict = {"ltid": self.ltid, "transactions": len(self.transactions),
+            stats: dict = {"ltid": self.ltid, "transactions": len(self.transactions),
                            "candidates": len(cands)}
             dhaeis = self.expansion(cands, f, minae, _stats=stats)
+            stats.setdefault("pruned_stdaeub", 0)
             stats["dhaeis"] = len(dhaeis)
             stats["elapsed_ms"] = round((time.perf_counter() - t0) * 1000, 2)
             self.last_stats = dict(stats)
@@ -634,43 +699,29 @@ class HAEIMDampedMiner:
                 "f": f, "ltid": self.ltid, "minae": minae,
                 "order": list(self.order),
                 "candidates": [
-                    {"pattern": list(n.pattern), "sdae": round(n.sdae, 4),
-                     "smdaeub": round(n.smdaeub, 4), "stdaeub": round(n.stdaeub, 4)}
+                    {"pattern": list(n.pattern), "sdae": _round4(n.sdae),
+                     "smdaeub": _round4(n.smdaeub), "stdaeub": _round4(n.stdaeub)}
                     for n in cands
                 ],
-                "dhaeis": dhaeis,
-                "stats": stats,
+                "dhaeis": copy.deepcopy(dhaeis),
+                "stats": dict(stats),
                 "cached": False,
             }
-            self._mine_cache = out
+            self._mine_cache = copy.deepcopy(out)
             self._mine_cache_key = key
-            return dict(out)
+            return copy.deepcopy(out)
 
     def reset(self) -> None:
         with self._lock:
-            self.transactions.clear()
-            self.nodes.clear()
-            self.order = []
-            self.order_index = {}
-            self.results = []
+            self._clear_locked()
             self._version += 1
-            self._mine_cache = None
-            self._mine_cache_key = None
-            self.last_stats = {}
 
     def load_example_stream(self) -> None:
-        from .data import EXAMPLE_STREAM
         with self._lock:
-            # reset nội bộ (không gọi self.reset để tránh lồng lock không cần thiết
-            # — RLock vẫn an toàn, nhưng tách rõ để dễ đọc)
-            self.transactions.clear()
-            self.nodes.clear()
-            self.order = []
-            self.order_index = {}
-            self.results = []
-            self._mine_cache = None
-            self._mine_cache_key = None
-            self.last_stats = {}
+            self._clear_locked()
             for tid in sorted(EXAMPLE_STREAM):
                 # construction cũng dùng lock (RLock nên an toàn khi lồng)
-                self.construction(tid, [(i, q) for i, q in EXAMPLE_STREAM[tid]])
+                self._construct_locked(tid, [(i, q) for i, q in EXAMPLE_STREAM[tid]])
+                self._version += 1
+            self._mine_cache = None
+            self._mine_cache_key = None

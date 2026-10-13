@@ -121,6 +121,7 @@ async function jpost(p, body) {
   return r.json();
 }
 function fmtPat(p) { return "{" + p.join(",") + "}"; }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 async function loadStatus() {
   try { const s = await jget("/"); document.getElementById("status").textContent = `ltid=${s.ltid} | ${s.transactions} GD | f=${s.default.f} minae=${s.default.minae}`; log("GET / ok"); }
@@ -130,7 +131,7 @@ async function loadConfig() {
   try {
     const c = await jget("/api/config");
     let h = `<table><tr><th>mục</th><th>eu</th><th>cu</th><th>inv</th></tr>`;
-    for (const k of Object.keys(c.eu).sort()) h += `<tr><td class="mono">${k}</td><td>${c.eu[k]}</td><td>${c.cu[k]}</td><td>${c.inv[k]}</td></tr>`;
+    for (const k of Object.keys(c.eu).sort()) h += `<tr><td class="mono">${esc(k)}</td><td>${c.eu[k]}</td><td>${c.cu[k] ?? ""}</td><td>${c.inv[k]}</td></tr>`;
     h += `</table><small class="hint">default f=${c.default_f}, minae=${c.default_minae}, ltid=${c.ltid}</small>`;
     document.getElementById("config").innerHTML = h; log("GET /api/config ok");
   } catch (e) { log("LỖI config: " + e.message); }
@@ -147,7 +148,9 @@ function parseItems(s) {
   return s.split(",").map(x => x.trim()).filter(Boolean).map(part => {
     const [item, qty] = part.split(":").map(x => x.trim());
     if (!item || !qty) throw new Error("Sai định dạng items, ví dụ a:1,b:2");
-    return { item, qty: Number(qty) };
+    const q = Number(qty);
+    if (!Number.isFinite(q) || q <= 0) throw new Error("qty phải > 0, ví dụ a:1,b:2");
+    return { item, qty: q };
   });
 }
 async function addTx() {
@@ -220,8 +223,10 @@ async function addBulk() {
 async function addItem() {
   try {
     const item = document.getElementById("newItem").value.trim();
+    if (!item) throw new Error("item rỗng");
     const eu = Number(document.getElementById("newEu").value);
     const inv = Number(document.getElementById("newInv").value);
+    if (!(eu > 0) || !(inv > 0)) throw new Error("eu/inv phải > 0");
     const r = await jpost("/api/items", { item, eu, inv });
     log(`POST items ok: ${r.item} eu=${r.eu} inv=${r.inv}`); loadConfig();
   } catch (e) { log("LỖI item: " + e.message); }

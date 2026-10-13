@@ -1,17 +1,27 @@
 """Pydantic schemas cho API HAEIM_Damped."""
 from __future__ import annotations
-from typing import List, Optional
-from pydantic import BaseModel, Field
+
+from typing import Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class TxItem(BaseModel):
-    item: str
+    item: str = Field(min_length=1)
     qty: float = Field(gt=0)
+
+    @field_validator("item")
+    @classmethod
+    def _strip_item(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("item rỗng")
+        return v
 
 
 class NewTransaction(BaseModel):
-    tid: Optional[int] = None
-    items: List[TxItem]
+    tid: Optional[int] = Field(default=None, gt=0)
+    items: list[TxItem] = Field(min_length=1)
 
 
 class NewItem(BaseModel):
@@ -20,9 +30,17 @@ class NewItem(BaseModel):
     inv: float = Field(gt=0, description="Chi phí đầu tư tĩnh INV(i), Bảng 2")
     cu: Optional[float] = Field(default=None, gt=0)
 
+    @field_validator("item")
+    @classmethod
+    def _strip_item(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("item rỗng")
+        return v
+
 
 class BulkTransactions(BaseModel):
-    transactions: List[NewTransaction] = Field(min_length=1)
+    transactions: list[NewTransaction] = Field(min_length=1)
 
 
 class MineRequest(BaseModel):

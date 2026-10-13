@@ -15,6 +15,9 @@ Suy luận đã kiểm chứng bằng code (xem README):
 
 from __future__ import annotations
 
+__all__ = ["EU", "CU", "INV", "EXAMPLE_STREAM", "EXAMPLE_UTILITY", "EXAMPLE_TU",
+           "DEFAULT_F", "DEFAULT_MINAE", "EXPECTED_SDAE_1ITEM", "EXPECTED_SMDAEUB"]
+
 # Ngoại tiện ích (external utility) suy từ Bảng 1: utility / qty
 EU = {"a": 4.0, "b": 3.0, "c": 5.0, "d": 2.0, "e": 4.0, "f": 2.0}
 
