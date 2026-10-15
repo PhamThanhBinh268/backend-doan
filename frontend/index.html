@@ -51,6 +51,7 @@
       <label>item mới: <input id="newItem" style="width:60px" placeholder="g" /></label>
       <label>eu: <input id="newEu" type="number" step="0.1" min="0.1" style="width:70px" value="5" /></label>
       <label>inv: <input id="newInv" type="number" step="0.1" min="0.1" style="width:70px" value="60" /></label>
+      <label>cu (tùy chọn): <input id="newCu" type="number" step="0.1" min="0.1" style="width:70px" placeholder="—" /></label>
       <button class="ghost" onclick="addItem()">Đăng ký item</button>
     </div>
     <small class="hint">PDF cố định a..f; luồng thực tế phát sinh mục mới thì đăng ký trước khi thêm giao dịch.</small>
@@ -226,9 +227,16 @@ async function addItem() {
     if (!item) throw new Error("item rỗng");
     const eu = Number(document.getElementById("newEu").value);
     const inv = Number(document.getElementById("newInv").value);
+    const cuVal = document.getElementById("newCu").value;
     if (!(eu > 0) || !(inv > 0)) throw new Error("eu/inv phải > 0");
-    const r = await jpost("/api/items", { item, eu, inv });
-    log(`POST items ok: ${r.item} eu=${r.eu} inv=${r.inv}`); loadConfig();
+    const body = { item, eu, inv };
+    if (cuVal) {
+      const cu = Number(cuVal);
+      if (!(cu > 0)) throw new Error("cu phải > 0");
+      body.cu = cu;
+    }
+    const r = await jpost("/api/items", body);
+    log(`POST items ok: ${r.item} eu=${r.eu} inv=${r.inv}${r.cu ? " cu=" + r.cu : ""}`); loadConfig();
   } catch (e) { log("LỖI item: " + e.message); }
 }
 loadStatus(); loadTx();

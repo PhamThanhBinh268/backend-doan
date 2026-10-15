@@ -113,13 +113,17 @@ class DAENode:
 class HAEIMDampedMiner:
     """Miner streaming HAEIM_Damped với đầy đủ 3 pha."""
 
-    def __init__(self, eu: dict[str, float], inv_table: dict[str, float]):
+    def __init__(self, eu: dict[str, float], inv_table: dict[str, float],
+                 cu: dict[str, float] | None = None):
         self.eu = dict(eu)
         self.inv_table = dict(inv_table)
+        self.cu: dict[str, float] = dict(cu) if cu else {}
         # transactions: tid -> {item: qty}
         self.transactions: dict[int, dict[str, float]] = {}
         # DAE-List toàn cục cho singleton (pha Construction tích lũy ở đây)
         self.nodes: dict[tuple[str, ...], DAENode] = {}
+        # pattern dài sinh ra trong Expansion gần nhất (để /api/dae-lists soi được)
+        self.extra_nodes: dict[tuple[str, ...], DAENode] = {}
         # thứ tự toàn phần sau Restructure (tăng dần SMDAEUB) — dùng cho Expansion
         self.order: list[str] = []
         self.order_index: dict[str, int] = {}
@@ -134,19 +138,33 @@ class HAEIMDampedMiner:
         self._mine_cache_key: tuple | None = None
         self.last_stats: dict = {}
 
-    def register_item(self, item: str, eu: float, inv: float) -> None:
+    @property
+    def version(self) -> int:
+        return self._version
+
+    def register_item(self, item: str, eu: float, inv: float,
+                      cu: float | None = None) -> None:
         """Đăng ký item mới xuất hiện trên luồng (mở rộng ngoài a..f của PDF).
 
         PDF cố định 6 mục Bảng 2; luồng thực tế có thể phát sinh mục mới.
+        Từ chối ghi đè item đã tồn tại để tránh entries cũ (ae/maeub) và
+        node.inv bị stale theo eu/inv mới.
         """
         item = str(item).strip()
         if not item:
             raise ValueError("item rỗng")
         if float(eu) <= 0 or float(inv) <= 0:
             raise ValueError("eu/inv phải > 0")
+        if cu is not None and float(cu) <= 0:
+            raise ValueError("cu phải > 0")
         with self._lock:
+            if item in self.eu or item in self.inv_table:
+                raise ValueError(f"item '{item}' đã tồn tại")
             self.eu[item] = float(eu)
             self.inv_table[item] = float(inv)
+            if cu is not None:
+                self.cu[item] = float(cu)
+            self.extra_nodes.clear()
             self._version += 1
             self._mine_cache = None
             self._mine_cache_key = None
@@ -191,6 +209,7 @@ class HAEIMDampedMiner:
         """Xóa toàn bộ trạng thái luồng (gọi khi đã giữ lock)."""
         self.transactions.clear()
         self.nodes.clear()
+        self.extra_nodes.clear()
         self.order = []
         self.order_index = {}
         self.results = []
@@ -255,6 +274,7 @@ class HAEIMDampedMiner:
         """
         with self._lock:
             self._construct_locked(tid, items)
+            self.extra_nodes.clear()
             self._version += 1
             self._mine_cache = None
             self._mine_cache_key = None
@@ -333,6 +353,7 @@ class HAEIMDampedMiner:
         f = _validate_decay(f)
         minae = _validate_minae(minae)
         with self._lock:
+            self.extra_nodes.clear()
             ltid = self.ltid
             # Tối ưu: tiền tính bảng trọng số 1 lần (thay vì ** cho mỗi entry),
             # tiền tính tập item từng tid để kiểm tra remaining O(1).
@@ -477,6 +498,7 @@ class HAEIMDampedMiner:
         """
         minae = _validate_minae(minae)
         with self._lock:
+            self.extra_nodes.clear()
             results: list[dict] = []
             ltid = self.ltid
             if weights is None:
@@ -499,13 +521,20 @@ class HAEIMDampedMiner:
                 if node.stdaeub < minae:
                     stats["pruned_stdaeub"] = stats.get("pruned_stdaeub", 0) + 1
                     return
-                for j, other in enumerate(cond):
+                # Sinh toàn bộ extensions cùng cấp của node trước...
+                exts: list[DAENode] = []
+                for other in cond:
                     stats["join_attempts"] += 1
                     joined = self._join(node, other, f, ltid, minae, weights=weights, tx_sets=tx_sets)
                     if joined is None:
                         continue
                     stats["join_success"] += 1
-                    dfs(joined, cond[j + 1:])
+                    self.extra_nodes[tuple(joined.pattern)] = joined
+                    exts.append(joined)
+                # ...rồi đệ quy từng extension với các siblings đứng sau nó
+                # (cùng độ dài, cùng tiền tố) để sinh pattern dài k+2, k+3...
+                for k, ext in enumerate(exts):
+                    dfs(ext, exts[k + 1:])
 
             # root: mỗi singleton làm gốc, cond = các singleton đứng sau nó
             for i, node in enumerate(candidates):
@@ -662,6 +691,7 @@ class HAEIMDampedMiner:
             for tid, items in batch:
                 self._construct_locked(tid, items)
                 tids.append(tid)
+            self.extra_nodes.clear()
             self._version += len(tids)
             self._mine_cache = None
             self._mine_cache_key = None

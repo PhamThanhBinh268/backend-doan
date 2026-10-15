@@ -100,7 +100,7 @@ curl -X POST localhost:8000/api/transactions -H "Content-Type: application/json"
 
 ```bash
 python -m pytest tests -v
-# 10 tests: Sdae khớp PDF, SMDAEUB khớp PDF (±0.02), pruning + DHAEIs,
+# 11 tests: Sdae khớp PDF, SMDAEUB khớp PDF (±0.02), pruning + DHAEIs,
 # streaming không quét lại, join tiền tố + LTDAEUB, Sdae({b,c}) HAEI, item động + validate,
-# mine cache + stats, bulk tương đương single, tid lộn xộn + two-pointer join.
+# mine cache + stats, bulk tương đương single, bulk atomic, tid lộn xộn + two-pointer join.
 ```

@@ -27,7 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-miner = HAEIMDampedMiner(eu=EU, inv_table=INV)
+miner = HAEIMDampedMiner(eu=EU, inv_table=INV, cu=CU)
 miner.load_example_stream()  # nạp sẵn Bảng 1 để demo đúng ví dụ PDF
 
 
@@ -62,7 +62,7 @@ def _allocate_bulk_tids(
 def root():
     return {"service": "HAEIM_Damped", "ltid": miner.ltid,
             "transactions": len(miner.transactions),
-            "version": miner._version,
+            "version": miner.version,
             "last_stats": miner.last_stats,
             "default": {"f": DEFAULT_F, "minae": DEFAULT_MINAE}}
 
@@ -70,7 +70,9 @@ def root():
 @app.get("/api/config")
 def get_config():
     """Bảng chi phí đầu tư, ngoại tiện ích và tham số mặc định (Bảng 2 + §2)."""
-    return {"eu": dict(miner.eu), "cu": CU, "inv": dict(miner.inv_table),
+    cu = dict(CU)
+    cu.update(miner.cu)
+    return {"eu": dict(miner.eu), "cu": cu, "inv": dict(miner.inv_table),
             "default_f": DEFAULT_F, "default_minae": DEFAULT_MINAE,
             "ltid": miner.ltid}
 
@@ -131,10 +133,12 @@ def add_transactions_bulk(body: BulkTransactions):
 def register_item(body: NewItem):
     """Đăng ký item mới phát sinh trên luồng (ngoài a..f của Bảng 2)."""
     try:
-        miner.register_item(body.item, body.eu, body.inv)
+        miner.register_item(body.item, body.eu, body.inv, body.cu)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    return {"item": body.item, "eu": miner.eu[body.item], "inv": miner.inv_table[body.item]}
+    return {"item": body.item, "eu": miner.eu[body.item],
+            "inv": miner.inv_table[body.item],
+            "cu": miner.cu.get(body.item)}
 
 
 @app.post("/api/mine")
@@ -153,10 +157,12 @@ def get_results():
 
 @app.get("/api/dae-lists")
 def dae_lists():
-    """Soát DAE-List toàn cục (cấp cửa sổ + entries cấp giao dịch thô)."""
+    """Soát DAE-List toàn cục (singleton + pattern dài từ Expansion gần nhất)."""
+    combined: dict[tuple, object] = dict(miner.nodes)
+    combined.update(miner.extra_nodes)
     out = []
-    for key in sorted(miner.nodes):
-        n = miner.nodes[key]
+    for key in sorted(combined):
+        n = combined[key]
         out.append({"pattern": list(n.pattern), "inv": n.inv,
                     "sdae": round(n.sdae, 4), "smdaeub": round(n.smdaeub, 4),
                     "stdaeub": round(n.stdaeub, 4),
