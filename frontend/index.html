@@ -3,243 +3,269 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>HAEIM_Damped — Test chức năng</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: Segoe UI, Arial, sans-serif; margin: 0; background: #f4f6f9; color: #222; }
-  header { background: #1a73e8; color: #fff; padding: 14px 20px; }
-  header h1 { margin: 0; font-size: 18px; }
-  header p { margin: 4px 0 0; font-size: 13px; opacity: .9; }
-  main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
-  .card { background: #fff; border-radius: 8px; padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-  .card h2 { margin: 0 0 10px; font-size: 16px; }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  input, select, button, textarea { font-size: 14px; padding: 7px 9px; border: 1px solid #ccc; border-radius: 6px; }
-  button { background: #1a73e8; color: #fff; border: none; cursor: pointer; }
-  button.ghost { background: #e8eefc; color: #1a73e8; }
-  button.danger { background: #d93025; }
-  button:disabled { opacity: .6; cursor: default; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
-  th, td { border: 1px solid #e0e0e0; padding: 6px 8px; text-align: left; }
-  th { background: #f1f3f4; }
-  .mono { font-family: Consolas, monospace; }
-  #log { background: #202124; color: #e8eaed; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; max-height: 220px; overflow: auto; white-space: pre-wrap; }
-  .ok { color: #188038; font-weight: 600; }
-  .warn { color: #b06000; font-weight: 600; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } }
-  small.hint { color: #666; }
-</style>
+<title>HAEIM_Damped — Bảng điều khiển khai thác luồng suy giảm</title>
+<link rel="stylesheet" href="/static/styles.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
 </head>
 <body>
-<header>
-  <h1>HAEIM_Damped — Trang test chức năng backend</h1>
-  <p>Pha 1 Construction (thêm giao dịch) → Pha 2 Restructure + Pha 3 Expansion (khai thác) — bám sát PDF</p>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">◈</span>
+    <div>
+      <h1>HAEIM_Damped</h1>
+      <p>Khai thác tập mục hiệu suất trung bình cao trên luồng dữ liệu suy giảm</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="stat-inline" id="hdrStats"><span class="muted">đang tải…</span></div>
+    <label class="api-box">API
+      <input id="apiBase" placeholder="(cùng origin)" size="14" />
+    </label>
+  </div>
 </header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-tab="overview">Tổng quan</button>
+  <button class="tab" data-tab="data">Dữ liệu</button>
+  <button class="tab" data-tab="mine">Khai thác</button>
+  <button class="tab" data-tab="dae">DAE-List</button>
+  <button class="tab" data-tab="exp">Thực nghiệm</button>
+  <button class="tab" data-tab="explain">Giải thích</button>
+</nav>
+
 <main>
-  <div class="card">
-    <h2>1. Trạng thái &amp; tham số (Bảng 2 + §2)</h2>
-    <div class="row">
-      <button onclick="loadStatus()">Tải trạng thái</button>
-      <button class="ghost" onclick="loadConfig()">Xem EU / CU / INV</button>
-      <button class="ghost" onclick="loadExample()">Nạp lại luồng mẫu (Bảng 1)</button>
-      <button class="danger" onclick="resetAll()">Reset luồng</button>
-      <span id="status" class="mono"></span>
-    </div>
-    <div id="config"></div>
-    <div class="row" style="margin-top:6px">
-      <label>item mới: <input id="newItem" style="width:60px" placeholder="g" /></label>
-      <label>eu: <input id="newEu" type="number" step="0.1" min="0.1" style="width:70px" value="5" /></label>
-      <label>inv: <input id="newInv" type="number" step="0.1" min="0.1" style="width:70px" value="60" /></label>
-      <label>cu (tùy chọn): <input id="newCu" type="number" step="0.1" min="0.1" style="width:70px" placeholder="—" /></label>
-      <button class="ghost" onclick="addItem()">Đăng ký item</button>
-    </div>
-    <small class="hint">PDF cố định a..f; luồng thực tế phát sinh mục mới thì đăng ký trước khi thêm giao dịch.</small>
-  </div>
+  <!-- ===================================================== TỔNG QUAN -->
+  <section class="page active" id="page-overview">
+    <div class="kpis" id="kpis"></div>
 
-  <div class="grid2">
     <div class="card">
-      <h2>2. Luồng giao dịch — Pha 1 Construction</h2>
-      <div class="row">
-        <button onclick="loadTx()">Xem giao dịch</button>
+      <h2>Quy trình 3 pha</h2>
+      <p class="muted small">Luồng dữ liệu đi qua 3 pha theo đúng mô hình của bài báo.</p>
+      <div class="pipeline">
+        <div class="stage" id="stage1">
+          <div class="stage-no">1</div>
+          <h3>Construction</h3>
+          <p>Tiếp nhận <code>T_j</code> và tích lũy DAE-List cấp cửa sổ.</p>
+          <p class="stage-metric" id="mConstruction">—</p>
+          <p class="stage-note">Chi phí <b>O(|T_j|)</b> — không quét lại dữ liệu cũ</p>
+        </div>
+        <div class="arrow">➜</div>
+        <div class="stage" id="stage2">
+          <div class="stage-no">2</div>
+          <h3>Restructure</h3>
+          <p>Áp suy giảm <code>f^(Ltid−tid)</code>, lọc, sắp xếp, tính cận trên.</p>
+          <p class="stage-metric" id="mRestructure">—</p>
+          <p class="stage-note">Lọc <b>SMDAEUB</b> + cận trên âm <code>sbound</code></p>
+        </div>
+        <div class="arrow">➜</div>
+        <div class="stage" id="stage3">
+          <div class="stage-no">3</div>
+          <h3>Expansion</h3>
+          <p>DFS sinh tập mục dài hơn, ghép theo tiền tố, cắt tỉa an toàn.</p>
+          <p class="stage-metric" id="mExpansion">—</p>
+          <p class="stage-note">Kết quả: <b>DHAEIs</b></p>
+        </div>
       </div>
-      <div id="txList"></div>
-      <h3 style="font-size:14px">Thêm T_j mới</h3>
-      <div class="row">
-        <label>tid (trống = tự tăng): <input id="newTid" type="number" min="1" style="width:90px" placeholder="9" /></label>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <label>items (dạng <span class="mono">a:1,b:2,c:1</span>):</label>
-        <input id="newItems" style="flex:1;min-width:220px" value="a:1,b:1,c:2" />
-        <button onclick="addTx()">Thêm (Construction)</button>
-      </div>
-      <small class="hint">Mặc định a..f theo Bảng 2. Item mới cần đăng ký ở mục 1 trước khi thêm.</small>
-      <h3 style="font-size:14px">Nạp hàng loạt (bulk)</h3>
-      <div class="row">
-        <textarea id="bulkText" rows="2" style="flex:1;min-width:220px" placeholder='[{"items":[{"item":"a","qty":1}]},{"tid":10,"items":[{"item":"b","qty":2}]}]'></textarea>
-        <button class="ghost" onclick="addBulk()">Nạp bulk</button>
-      </div>
-      <small class="hint">1 request cho nhiều T_j (tid trống = tự tăng).</small>
     </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Hiệu suất theo tập mục (Sdae)</h2>
+        <div id="chartSdae" class="chart-box"><p class="muted">Chạy khai thác để xem biểu đồ.</p></div>
+      </div>
+      <div class="card">
+        <h2>Kiểm chứng nhanh</h2>
+        <p class="muted small">Đối chiếu thuật toán cắt tỉa với ground truth (duyệt tất cả tập mục).</p>
+        <div class="row">
+          <label>f <input id="q_f" type="number" step="0.01" min="0.01" max="0.99" value="0.8" /></label>
+          <label>minae <input id="q_minae" type="number" step="0.01" min="0" value="0.2" /></label>
+          <button class="primary" id="btnQuickValidate">Kiểm chứng</button>
+        </div>
+        <div id="quickValidate" class="result-box"></div>
+      </div>
+    </div>
+
     <div class="card">
-      <h2>3. Khai thác — Pha 2 + 3 (Restructure + Expansion)</h2>
-      <div class="row">
-        <label>f (0&lt;f&lt;1): <input id="f" type="number" step="0.01" min="0.01" max="0.99" value="0.8" style="width:80px" /></label>
-        <label>minae: <input id="minae" type="number" step="0.01" min="0" value="0.2" style="width:80px" /></label>
-        <button onclick="mine()">Chạy khai thác</button>
-        <button class="ghost" onclick="loadResults()">Xem DHAEIs</button>
+      <h2>Điểm nhấn kỹ thuật</h2>
+      <div class="highlights">
+        <div class="hl">
+          <div class="hl-title">Cắt tỉa <b>an toàn</b> (cận trên âm)</div>
+          <p>Cận trên dùng để cắt nhánh được chứng minh <b>không bao giờ</b> bỏ sót HAEI — kiểm chứng tự động bằng ground truth trên 30+ luồng ngẫu nhiên.</p>
+        </div>
+        <div class="hl">
+          <div class="hl-title">Ground truth độc lập</div>
+          <p>Module <code>baseline.py</code> duyệt <b>mọi</b> tập mục con của mọi giao dịch (O(Σ2^|T_j|)) — chuẩn vàng để đo độ đúng, không dùng bất kỳ cắt tỉa nào.</p>
+        </div>
+        <div class="hl">
+          <div class="hl-title">Tự sinh dữ liệu tái lập được</div>
+          <p>Bộ sinh mô phỏng dữ liệu siêu thị (Zipf + trôi thị phần), <b>tất định theo seed</b>; kèm nhập/xuất CSV để chạy trên dữ liệu thật.</p>
+        </div>
+        <div class="hl">
+          <div class="hl-title">Truy vết "vì sao"</div>
+          <p>Mỗi pattern có thể giải thích đầy đủ: đóng góp từng giao dịch, cận trên đã dùng, và lý do bị loại — phục vụ trình bày & bảo vệ.</p>
+        </div>
       </div>
-      <small class="hint">Mặc định PDF: f=0.8, Ltid=8, minae=0.2 → DHAEIs = {b}, {c}, {b,c}.</small>
-      <div id="mineOut"></div>
     </div>
-  </div>
+  </section>
 
-  <div class="card">
-    <h2>4. Soi DAE-List (cấp cửa sổ + entry cấp giao dịch)</h2>
-    <div class="row"><button onclick="loadDae()">Tải DAE-Lists</button> <span id="order" class="mono"></span></div>
-    <div id="daeOut"></div>
-  </div>
+  <!-- ===================================================== DỮ LIỆU -->
+  <section class="page" id="page-data">
+    <div class="grid2">
+      <div class="card">
+        <h2>Bộ dữ liệu</h2>
+        <div class="row">
+          <select id="dsKey"></select>
+          <button class="primary" id="btnLoadDataset">Nạp bộ dữ liệu</button>
+        </div>
+        <h3 class="small">Sinh luồng tổng hợp</h3>
+        <div class="row">
+          <label>số GD <input id="genNtx" type="number" value="500" min="1" /></label>
+          <label>số mục <input id="genNitems" type="number" value="12" min="2" /></label>
+          <label>seed <input id="genSeed" type="number" value="42" min="0" /></label>
+          <label>giỏ tối đa <input id="genMaxb" type="number" value="8" min="2" max="20" /></label>
+          <button class="ghost" id="btnGenerate">Sinh &amp; nạp</button>
+        </div>
+        <h3 class="small">Nhập từ CSV</h3>
+        <textarea id="csvText" rows="4" placeholder="tid,item,qty&#10;1,a,1&#10;1,b,2&#10;2,a,3"></textarea>
+        <div class="row">
+          <button class="ghost" id="btnImportCsv">Nhập CSV (tự suy EU/INV)</button>
+          <button class="ghost danger" id="btnReset">Xóa luồng</button>
+          <button class="ghost" id="btnLoadExample">Nạp Bảng 1 (PDF)</button>
+        </div>
+        <div id="dsInfo" class="result-box"></div>
+      </div>
+      <div class="card">
+        <h2>Bảng chi phí (Bảng 2)</h2>
+        <div id="configTable"></div>
+      </div>
+    </div>
 
-  <div class="card">
-    <h2>Log</h2>
-    <div id="log"></div>
-  </div>
+    <div class="card">
+      <h2>Luồng giao dịch hiện tại</h2>
+      <div class="row">
+        <label>Thêm T_j: <input id="newItems" placeholder="a:1,b:2,c:1" size="22" /></label>
+        <button class="primary" id="btnAddTx">Thêm (Construction)</button>
+        <span class="muted small" id="txCount"></span>
+      </div>
+      <div id="txTable" class="scroll"></div>
+    </div>
+  </section>
+
+  <!-- ===================================================== KHAI THÁC -->
+  <section class="page" id="page-mine">
+    <div class="card">
+      <h2>Khai thác — Pha 2 + Pha 3</h2>
+      <div class="row">
+        <label>f (0&lt;f&lt;1) <input id="m_f" type="number" step="0.01" min="0.01" max="0.99" value="0.8" /></label>
+        <label>minae <input id="m_minae" type="number" step="0.01" min="0" value="0.2" /></label>
+        <label class="chk"><input id="m_sound" type="checkbox" checked /> cắt tỉa âm (an toàn)</label>
+        <button class="primary" id="btnMine">Chạy khai thác</button>
+        <button class="ghost" id="btnExport">Xuất CSV</button>
+      </div>
+      <p class="muted small">Bỏ chọn “cắt tỉa âm” để dùng cận trên 1-phần-mở-rộng của bài báo (nhanh hơn nhưng <b>bỏ sót HAEI</b> — dùng để đối chiếu).</p>
+      <div id="mineSummary" class="result-box"></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Tập kết quả DHAEIs</h2>
+        <div id="dhaeiTable" class="scroll"></div>
+      </div>
+      <div class="card">
+        <h2>Ứng viên sau Restructure</h2>
+        <div id="candTable" class="scroll"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Thứ tự ưu tiên (tăng dần SMDAEUB)</h2>
+      <div id="orderChart" class="chart-box"></div>
+    </div>
+  </section>
+
+  <!-- ===================================================== DAE-LIST -->
+  <section class="page" id="page-dae">
+    <div class="card">
+      <h2>Soi DAE-List</h2>
+      <div class="row">
+        <button class="primary" id="btnLoadDae">Tải DAE-List</button>
+        <span class="muted mono" id="daeOrder"></span>
+      </div>
+      <div id="daeList" class="scroll"></div>
+    </div>
+  </section>
+
+  <!-- ===================================================== THỰC NGHIỆM -->
+  <section class="page" id="page-exp">
+    <div class="card">
+      <h2>1. Hiệu năng so với ground truth</h2>
+      <div class="row">
+        <label>số GD <input id="bNtx" type="number" value="500" min="1" /></label>
+        <label>số mục <input id="bNitems" type="number" value="12" min="2" /></label>
+        <label>giỏ tối đa <input id="bMaxb" type="number" value="8" min="2" max="16" /></label>
+        <label>seed <input id="bSeed" type="number" value="42" min="0" /></label>
+        <button class="primary" id="btnBench">Chạy benchmark</button>
+      </div>
+      <div id="benchOut" class="result-box"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. So sánh 2 chiến lược cắt tỉa</h2>
+      <p class="muted small">Cắt tỉa <b>âm</b> (an toàn) vs cận trên 1-phần-mở-rộng của bài báo (nhanh hơn, bỏ sót HAEI).</p>
+      <div class="row">
+        <label>số GD <input id="pNtx" type="number" value="1000" min="1" /></label>
+        <label>số mục <input id="pNitems" type="number" value="18" min="2" /></label>
+        <label>giỏ tối đa <input id="pMaxb" type="number" value="12" min="2" max="16" /></label>
+        <button class="primary" id="btnPruneCmp">Chạy so sánh</button>
+      </div>
+      <div id="pruneCmpOut" class="result-box"></div>
+    </div>
+
+    <div class="card">
+      <h2>3. Quét kích thước (scalability)</h2>
+      <div class="row">
+        <button class="ghost" id="btnScalability">Quét 5 cấu hình chuẩn</button>
+        <span class="muted small">Thời gian chạy (ms) theo số giao dịch — có so sánh với ground truth.</span>
+      </div>
+      <div id="scaleOut" class="result-box"></div>
+    </div>
+
+    <div class="card">
+      <h2>4. Độ nhạy theo tham số (f, minae)</h2>
+      <div class="row">
+        <button class="ghost" id="btnSweep">Quét tham số trên luồng hiện tại</button>
+        <span class="muted small">Số lượng HAEI khi đổi hệ số suy giảm f và ngưỡng minae.</span>
+      </div>
+      <div id="sweepOut" class="result-box"></div>
+    </div>
+
+    <div class="card">
+      <h2>5. Chi phí Pha 1 (Construction)</h2>
+      <div class="row">
+        <button class="ghost" id="btnCost">Đo chi phí Construction</button>
+        <span class="muted small">Kiểm chứng tính chất O(|T_j|): thời gian/GD không phình theo độ dài luồng.</span>
+      </div>
+      <div id="costOut" class="result-box"></div>
+    </div>
+  </section>
+
+  <!-- ===================================================== GIẢI THÍCH -->
+  <section class="page" id="page-explain">
+    <div class="card">
+      <h2>Giải thích một tập mục</h2>
+      <div class="row">
+        <label>pattern <input id="exPattern" placeholder="b,c" size="16" /></label>
+        <label>f <input id="exF" type="number" step="0.01" value="0.8" /></label>
+        <label>minae <input id="exMinae" type="number" step="0.01" value="0.2" /></label>
+        <button class="primary" id="btnExplain">Giải thích</button>
+        <button class="ghost" id="btnExplainAll">Giải thích toàn bộ kết quả</button>
+      </div>
+      <div id="explainOut" class="result-box"></div>
+    </div>
+  </section>
 </main>
-<script>
-const API = "";
-function log(msg) {
-  const el = document.getElementById("log");
-  el.textContent = new Date().toLocaleTimeString() + "  " + msg + "\n" + el.textContent;
-}
-async function jget(p) {
-  const r = await fetch(API + p);
-  if (!r.ok) throw new Error(p + " -> " + r.status + " " + await r.text());
-  return r.json();
-}
-async function jpost(p, body) {
-  const r = await fetch(API + p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
-  if (!r.ok) throw new Error(p + " -> " + r.status + " " + await r.text());
-  return r.json();
-}
-function fmtPat(p) { return "{" + p.join(",") + "}"; }
-function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
-async function loadStatus() {
-  try { const s = await jget("/"); document.getElementById("status").textContent = `ltid=${s.ltid} | ${s.transactions} GD | f=${s.default.f} minae=${s.default.minae}`; log("GET / ok"); }
-  catch (e) { log("LỖI status: " + e.message); }
-}
-async function loadConfig() {
-  try {
-    const c = await jget("/api/config");
-    let h = `<table><tr><th>mục</th><th>eu</th><th>cu</th><th>inv</th></tr>`;
-    for (const k of Object.keys(c.eu).sort()) h += `<tr><td class="mono">${esc(k)}</td><td>${c.eu[k]}</td><td>${c.cu[k] ?? ""}</td><td>${c.inv[k]}</td></tr>`;
-    h += `</table><small class="hint">default f=${c.default_f}, minae=${c.default_minae}, ltid=${c.ltid}</small>`;
-    document.getElementById("config").innerHTML = h; log("GET /api/config ok");
-  } catch (e) { log("LỖI config: " + e.message); }
-}
-async function loadTx() {
-  try {
-    const d = await jget("/api/transactions");
-    let h = `<p class="mono">Ltid=${d.ltid} — ${d.transactions.length} giao dịch</p><table><tr><th>tid</th><th>items (item:qty)</th></tr>`;
-    for (const t of d.transactions) h += `<tr><td>${t.tid}</td><td class="mono">${t.items.map(x => x.item + ":" + x.qty).join(", ")}</td></tr>`;
-    document.getElementById("txList").innerHTML = h + "</table>"; log(`GET transactions ok (${d.transactions.length})`);
-  } catch (e) { log("LỖI tx: " + e.message); }
-}
-function parseItems(s) {
-  return s.split(",").map(x => x.trim()).filter(Boolean).map(part => {
-    const [item, qty] = part.split(":").map(x => x.trim());
-    if (!item || !qty) throw new Error("Sai định dạng items, ví dụ a:1,b:2");
-    const q = Number(qty);
-    if (!Number.isFinite(q) || q <= 0) throw new Error("qty phải > 0, ví dụ a:1,b:2");
-    return { item, qty: q };
-  });
-}
-async function addTx() {
-  try {
-    const tidVal = document.getElementById("newTid").value;
-    const items = parseItems(document.getElementById("newItems").value);
-    const body = { items };
-    if (tidVal) body.tid = Number(tidVal);
-    const r = await jpost("/api/transactions", body);
-    log(`POST transaction ok: tid=${r.tid}, ltid=${r.ltid}`);
-    loadTx(); loadStatus();
-  } catch (e) { log("LỖI thêm GD: " + e.message); }
-}
-async function mine() {
-  try {
-    const f = Number(document.getElementById("f").value);
-    const minae = Number(document.getElementById("minae").value);
-    const r = await jpost("/api/mine", { f, minae });
-    const st = r.stats ? ` | ${r.stats.elapsed_ms}ms joins ${r.stats.join_success}/${r.stats.join_attempts}${r.cached ? " (cache)" : ""}` : (r.cached ? " (cache)" : "");
-    let h = `<p>Thứ tự sau Restructure (tăng dần SMDAEUB): <b class="mono">[${r.order.join(", ")}]</b> | Ltid=${r.ltid}${st}</p>`;
-    h += `<h3 style="font-size:14px">Ứng viên sau lọc SMDAEUB</h3><table><tr><th>pattern</th><th>Sdae</th><th>SMDAEUB</th><th>STDAEUB</th><th>KL</th></tr>`;
-    for (const c of r.candidates) {
-      const keep = c.stdaeub >= minae ? '<span class="ok">mở rộng</span>' : '<span class="warn">cắt</span>';
-      const haei = c.sdae >= minae ? '<span class="ok">HAEI</span>' : 'loại';
-      h += `<tr><td class="mono">${fmtPat(c.pattern)}</td><td>${c.sdae}</td><td>${c.smdaeub}</td><td>${c.stdaeub}</td><td>${haei} / ${keep}</td></tr>`;
-    }
-    h += `</table><h3 style="font-size:14px">Tập kết quả DHAEIs</h3><table><tr><th>pattern</th><th>Sdae</th></tr>`;
-    for (const d of r.dhaeis) h += `<tr><td class="mono">${fmtPat(d.pattern)}</td><td>${d.sdae}</td></tr>`;
-    document.getElementById("mineOut").innerHTML = h + "</table>";
-    log(`POST mine ok: f=${f} minae=${minae} -> ${r.dhaeis.length} DHAEIs`);
-  } catch (e) { log("LỖI mine: " + e.message); }
-}
-async function loadResults() {
-  try {
-    const r = await jget("/api/results");
-    let h = `<table><tr><th>pattern</th><th>Sdae</th></tr>`;
-    for (const d of r.dhaeis) h += `<tr><td class="mono">${fmtPat(d.pattern)}</td><td>${d.sdae}</td></tr>`;
-    document.getElementById("mineOut").innerHTML = `<p class="mono">Ltid=${r.ltid}</p>` + h + "</table>";
-    log("GET results ok");
-  } catch (e) { log("LỖI results: " + e.message); }
-}
-async function loadDae() {
-  try {
-    const r = await jget("/api/dae-lists");
-    document.getElementById("order").textContent = "order: [" + r.order.join(", ") + "]";
-    let h = "";
-    for (const n of r.nodes) {
-      h += `<h3 style="font-size:14px" class="mono">${fmtPat(n.pattern)} — Inv=${n.inv} Sdae=${n.sdae} SMDAEUB=${n.smdaeub} STDAEUB=${n.stdaeub}</h3>`;
-      h += `<table><tr><th>tid</th><th>u</th><th>ae</th><th>MAEUB</th><th>dae</th><th>MDAEUB</th><th>TDAEUB</th><th>maxru</th><th>minInv</th><th>k</th></tr>`;
-      for (const e of n.entries) h += `<tr><td>${e.tid}</td><td>${e.u}</td><td>${e.ae}</td><td>${e.maeub}</td><td>${e.dae}</td><td>${e.mdaeub}</td><td>${e.tdaeub}</td><td>${e.maxru}</td><td>${e.minInv}</td><td>${e.k}</td></tr>`;
-      h += `</table>`;
-    }
-    document.getElementById("daeOut").innerHTML = h; log(`GET dae-lists ok (${r.nodes.length} nodes)`);
-  } catch (e) { log("LỖI dae: " + e.message); }
-}
-async function resetAll() {
-  try { await jpost("/api/reset", {}); log("POST reset ok"); loadTx(); loadStatus(); } catch (e) { log("LỖI reset: " + e.message); }
-}
-async function loadExample() {
-  try { const r = await jpost("/api/load-example", {}); log(`POST load-example ok: ${r.loaded} GD`); loadTx(); loadStatus(); } catch (e) { log("LỖI example: " + e.message); }
-}
-async function addBulk() {
-  try {
-    const arr = JSON.parse(document.getElementById("bulkText").value || "[]");
-    const r = await jpost("/api/transactions/bulk", { transactions: arr });
-    log(`POST bulk ok: ${r.loaded} GD, tids=${r.tids}`);
-    loadTx(); loadStatus();
-  } catch (e) { log("LỖI bulk: " + e.message); }
-}
-async function addItem() {
-  try {
-    const item = document.getElementById("newItem").value.trim();
-    if (!item) throw new Error("item rỗng");
-    const eu = Number(document.getElementById("newEu").value);
-    const inv = Number(document.getElementById("newInv").value);
-    const cuVal = document.getElementById("newCu").value;
-    if (!(eu > 0) || !(inv > 0)) throw new Error("eu/inv phải > 0");
-    const body = { item, eu, inv };
-    if (cuVal) {
-      const cu = Number(cuVal);
-      if (!(cu > 0)) throw new Error("cu phải > 0");
-      body.cu = cu;
-    }
-    const r = await jpost("/api/items", body);
-    log(`POST items ok: ${r.item} eu=${r.eu} inv=${r.inv}${r.cu ? " cu=" + r.cu : ""}`); loadConfig();
-  } catch (e) { log("LỖI item: " + e.message); }
-}
-loadStatus(); loadTx();
-</script>
+<div class="console" id="console"></div>
+<script src="/static/app.js"></script>
 </body>
 </html>

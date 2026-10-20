@@ -1,0 +1,451 @@
+{
+ "env": {
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.10",
+  "date": "2026-10-20",
+  "quick": false
+ },
+ "params": {
+  "f": 0.8,
+  "minae": 0.2
+ },
+ "experiments": [
+  {
+   "title": "Độ đúng: HAEIM_Damped (cắt tỉa âm) vs ground truth",
+   "rows": [
+    {
+     "transactions": 100,
+     "items": 6,
+     "max_items_per_tx": 4,
+     "haei_pruned": 4,
+     "haei_exact": 4,
+     "agreement": 1.0,
+     "sound": true,
+     "missing": [],
+     "pruned_ms": 2.01,
+     "exact_ms": 1.933,
+     "itemsets_examined": 776,
+     "speedup": 0.96
+    },
+    {
+     "transactions": 200,
+     "items": 8,
+     "max_items_per_tx": 6,
+     "haei_pruned": 8,
+     "haei_exact": 8,
+     "agreement": 1.0,
+     "sound": true,
+     "missing": [],
+     "pruned_ms": 8.93,
+     "exact_ms": 6.835,
+     "itemsets_examined": 4724,
+     "speedup": 0.77
+    },
+    {
+     "transactions": 500,
+     "items": 12,
+     "max_items_per_tx": 8,
+     "haei_pruned": 33,
+     "haei_exact": 33,
+     "agreement": 1.0,
+     "sound": true,
+     "missing": [],
+     "pruned_ms": 94.27,
+     "exact_ms": 61.211,
+     "itemsets_examined": 36200,
+     "speedup": 0.65
+    },
+    {
+     "transactions": 1000,
+     "items": 18,
+     "max_items_per_tx": 12,
+     "haei_pruned": 49,
+     "haei_exact": 49,
+     "agreement": 1.0,
+     "sound": true,
+     "missing": [],
+     "pruned_ms": 214.76,
+     "exact_ms": 2254.877,
+     "itemsets_examined": 797164,
+     "speedup": 10.5
+    },
+    {
+     "transactions": 2000,
+     "items": 20,
+     "max_items_per_tx": 12,
+     "haei_pruned": 74,
+     "haei_exact": 74,
+     "agreement": 1.0,
+     "sound": true,
+     "missing": [],
+     "pruned_ms": 606.85,
+     "exact_ms": 3570.017,
+     "itemsets_examined": 1476812,
+     "speedup": 5.88
+    }
+   ]
+  },
+  {
+   "title": "So sánh 2 chiến lược cắt tỉa",
+   "rows": [
+    {
+     "transactions": 500,
+     "items": 14,
+     "max_items_per_tx": 10,
+     "sound_ms": 186.4,
+     "sound_hits": 39,
+     "legacy_ms": 79.83,
+     "legacy_hits": 39,
+     "exact_hits": 39,
+     "legacy_missing": [],
+     "sound_agreement": 1.0,
+     "legacy_agreement": 1.0,
+     "exact_ms": 386.959
+    },
+    {
+     "transactions": 1000,
+     "items": 18,
+     "max_items_per_tx": 12,
+     "sound_ms": 321.09,
+     "sound_hits": 49,
+     "legacy_ms": 203.91,
+     "legacy_hits": 48,
+     "exact_hits": 49,
+     "legacy_missing": [
+      [
+       "f",
+       "m"
+      ]
+     ],
+     "sound_agreement": 1.0,
+     "legacy_agreement": 0.979592,
+     "exact_ms": 2274.487
+    },
+    {
+     "transactions": 2000,
+     "items": 20,
+     "max_items_per_tx": 14,
+     "sound_ms": 506.01,
+     "sound_hits": 43,
+     "legacy_ms": 468.06,
+     "legacy_hits": 43,
+     "exact_hits": 43,
+     "legacy_missing": [],
+     "sound_agreement": 1.0,
+     "legacy_agreement": 1.0,
+     "exact_ms": 12753.875
+    }
+   ]
+  },
+  {
+   "title": "Khả năng mở rộng (scalability) — giỏ hàng tối đa 10 mục",
+   "rows": [
+    {
+     "transactions": 100,
+     "items": 8,
+     "seed": 42,
+     "f": 0.8,
+     "minae": 0.2,
+     "pruned_ms": 9.742,
+     "pruned_hits": 15,
+     "join_attempts": 26,
+     "join_success": 23,
+     "pruned_stdaeub": 12,
+     "exact_ms": 15.13,
+     "exact_hits": 15,
+     "itemsets_examined": 8224,
+     "speedup": 1.55,
+     "agreement": 1.0,
+     "sound": true,
+     "complete": true,
+     "missing": [],
+     "extra": []
+    },
+    {
+     "transactions": 200,
+     "items": 10,
+     "seed": 42,
+     "f": 0.8,
+     "minae": 0.2,
+     "pruned_ms": 57.69,
+     "pruned_hits": 29,
+     "join_attempts": 65,
+     "join_success": 53,
+     "pruned_stdaeub": 30,
+     "exact_ms": 101.679,
+     "exact_hits": 29,
+     "itemsets_examined": 55256,
+     "speedup": 1.76,
+     "agreement": 1.0,
+     "sound": true,
+     "complete": true,
+     "missing": [],
+     "extra": []
+    },
+    {
+     "transactions": 400,
+     "items": 12,
+     "seed": 42,
+     "f": 0.8,
+     "minae": 0.2,
+     "pruned_ms": 65.002,
+     "pruned_hits": 27,
+     "join_attempts": 81,
+     "join_success": 60,
+     "pruned_stdaeub": 34,
+     "exact_ms": 218.465,
+     "exact_hits": 27,
+     "itemsets_examined": 92576,
+     "speedup": 3.36,
+     "agreement": 1.0,
+     "sound": true,
+     "complete": true,
+     "missing": [],
+     "extra": []
+    },
+    {
+     "transactions": 800,
+     "items": 14,
+     "seed": 42,
+     "f": 0.8,
+     "minae": 0.2,
+     "pruned_ms": 299.371,
+     "pruned_hits": 73,
+     "join_attempts": 130,
+     "join_success": 112,
+     "pruned_stdaeub": 43,
+     "exact_ms": 404.045,
+     "exact_hits": 73,
+     "itemsets_examined": 194716,
+     "speedup": 1.35,
+     "agreement": 1.0,
+     "sound": true,
+     "complete": true,
+     "missing": [],
+     "extra": []
+    },
+    {
+     "transactions": 1600,
+     "items": 16,
+     "seed": 42,
+     "f": 0.8,
+     "minae": 0.2,
+     "pruned_ms": 366.161,
+     "pruned_hits": 40,
+     "join_attempts": 122,
+     "join_success": 96,
+     "pruned_stdaeub": 49,
+     "exact_ms": 702.181,
+     "exact_hits": 40,
+     "itemsets_examined": 373444,
+     "speedup": 1.92,
+     "agreement": 1.0,
+     "sound": true,
+     "complete": true,
+     "missing": [],
+     "extra": []
+    }
+   ]
+  },
+  {
+   "title": "Độ nhạy theo tham số f / minae",
+   "rows": [
+    {
+     "f": 0.6,
+     "minae": 0.05,
+     "count": 243,
+     "max_sdae": 1.6889,
+     "mean_sdae": 0.1022,
+     "elapsed_ms": 678.975,
+     "cached": false
+    },
+    {
+     "f": 0.6,
+     "minae": 0.1,
+     "count": 63,
+     "max_sdae": 1.6889,
+     "mean_sdae": 0.1981,
+     "elapsed_ms": 316.626,
+     "cached": false
+    },
+    {
+     "f": 0.6,
+     "minae": 0.2,
+     "count": 14,
+     "max_sdae": 1.6889,
+     "mean_sdae": 0.4192,
+     "elapsed_ms": 135.551,
+     "cached": false
+    },
+    {
+     "f": 0.6,
+     "minae": 0.3,
+     "count": 7,
+     "max_sdae": 1.6889,
+     "mean_sdae": 0.6084,
+     "elapsed_ms": 98.158,
+     "cached": false
+    },
+    {
+     "f": 0.6,
+     "minae": 0.4,
+     "count": 3,
+     "max_sdae": 1.6889,
+     "mean_sdae": 0.9708,
+     "elapsed_ms": 59.403,
+     "cached": false
+    },
+    {
+     "f": 0.7,
+     "minae": 0.05,
+     "count": 326,
+     "max_sdae": 2.1446,
+     "mean_sdae": 0.1163,
+     "elapsed_ms": 761.227,
+     "cached": false
+    },
+    {
+     "f": 0.7,
+     "minae": 0.1,
+     "count": 118,
+     "max_sdae": 2.1446,
+     "mean_sdae": 0.1944,
+     "elapsed_ms": 459.434,
+     "cached": false
+    },
+    {
+     "f": 0.7,
+     "minae": 0.2,
+     "count": 28,
+     "max_sdae": 2.1446,
+     "mean_sdae": 0.3897,
+     "elapsed_ms": 210.801,
+     "cached": false
+    },
+    {
+     "f": 0.7,
+     "minae": 0.3,
+     "count": 10,
+     "max_sdae": 2.1446,
+     "mean_sdae": 0.6606,
+     "elapsed_ms": 102.876,
+     "cached": false
+    },
+    {
+     "f": 0.7,
+     "minae": 0.4,
+     "count": 6,
+     "max_sdae": 2.1446,
+     "mean_sdae": 0.8624,
+     "elapsed_ms": 94.59,
+     "cached": false
+    },
+    {
+     "f": 0.8,
+     "minae": 0.05,
+     "count": 495,
+     "max_sdae": 3.0862,
+     "mean_sdae": 0.1362,
+     "elapsed_ms": 851.539,
+     "cached": false
+    },
+    {
+     "f": 0.8,
+     "minae": 0.1,
+     "count": 235,
+     "max_sdae": 3.0862,
+     "mean_sdae": 0.2085,
+     "elapsed_ms": 464.25,
+     "cached": false
+    },
+    {
+     "f": 0.8,
+     "minae": 0.2,
+     "count": 65,
+     "max_sdae": 3.0862,
+     "mean_sdae": 0.3884,
+     "elapsed_ms": 244.163,
+     "cached": false
+    },
+    {
+     "f": 0.8,
+     "minae": 0.3,
+     "count": 31,
+     "max_sdae": 3.0862,
+     "mean_sdae": 0.5515,
+     "elapsed_ms": 225.638,
+     "cached": false
+    },
+    {
+     "f": 0.8,
+     "minae": 0.4,
+     "count": 13,
+     "max_sdae": 3.0862,
+     "mean_sdae": 0.8441,
+     "elapsed_ms": 122.456,
+     "cached": false
+    },
+    {
+     "f": 0.9,
+     "minae": 0.05,
+     "count": 850,
+     "max_sdae": 5.878,
+     "mean_sdae": 0.1789,
+     "elapsed_ms": 991.253,
+     "cached": false
+    },
+    {
+     "f": 0.9,
+     "minae": 0.1,
+     "count": 468,
+     "max_sdae": 5.878,
+     "mean_sdae": 0.2665,
+     "elapsed_ms": 599.644,
+     "cached": false
+    },
+    {
+     "f": 0.9,
+     "minae": 0.2,
+     "count": 204,
+     "max_sdae": 5.878,
+     "mean_sdae": 0.4295,
+     "elapsed_ms": 410.074,
+     "cached": false
+    },
+    {
+     "f": 0.9,
+     "minae": 0.3,
+     "count": 107,
+     "max_sdae": 5.878,
+     "mean_sdae": 0.6007,
+     "elapsed_ms": 337.057,
+     "cached": false
+    },
+    {
+     "f": 0.9,
+     "minae": 0.4,
+     "count": 59,
+     "max_sdae": 5.878,
+     "mean_sdae": 0.8153,
+     "elapsed_ms": 239.36,
+     "cached": false
+    }
+   ]
+  },
+  {
+   "title": "Chi phí Pha 1 (Construction) — kiểm chứng O(|T_j|)",
+   "rows": [
+    {
+     "transactions": 600,
+     "items": 12,
+     "total_ms": 7.872,
+     "avg_ms_first_half": 0.0135,
+     "avg_ms_second_half": 0.0128,
+     "growth_ratio": 0.945,
+     "bulk_ms": 8.015,
+     "bulk_speedup": 0.98
+    }
+   ]
+  }
+ ]
+}
