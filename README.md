@@ -25,9 +25,9 @@
 | 6 | **Dashboard 6 màn hình** | Trình bày & bảo vệ luận văn không cần Postman. |
 
 > **Kết quả tiêu biểu** (luồng 1000 GD / 18 mục / giỏ ≤ 12 mục, `f=0.8`, `minae=0.2`):
-> cắt tỉa âm tìm đủ **49/49** HAEI (khớp 100% ground truth) trong **0.54 s**,
-> nhanh hơn ground truth **9×**; bản cắt tỉa kiểu bài báo chạy nhanh hơn nhưng
-> **bỏ sót 1 HAEI**.
+> cắt tỉa âm tìm đủ **49/49** HAEI (khớp 100% ground truth) trong **0.21 s**,
+> nhanh hơn ground truth **10.5×**; bản cắt tỉa kiểu bài báo chạy nhanh hơn nhưng
+> **bỏ sót 1 HAEI** (`{f,m}`).
 
 ---
 
@@ -249,11 +249,11 @@ Số liệu đầy đủ (sinh tự động, tái lập được): [`docs/result
 
 | Luồng | HAEI (thuật toán) | HAEI (ground truth) | Khớp | Thời gian | Ground truth | Nhanh hơn |
 |---|---|---|---|---|---|---|
-| 100 GD / 6 mục (giỏ ≤ 4) | 4 | 4 | **100%** | 0.007 s | 0.006 s | 0.8× |
-| 200 GD / 8 mục (giỏ ≤ 6) | 8 | 8 | **100%** | 0.023 s | 0.023 s | 1.0× |
-| 500 GD / 12 mục (giỏ ≤ 8) | 33 | 33 | **100%** | 0.19 s | 0.19 s | 1.0× |
-| 1000 GD / 18 mục (giỏ ≤ 12) | 49 | 49 | **100%** | 0.53 s | 4.33 s | **8.2×** |
-| 2000 GD / 20 mục (giỏ ≤ 12) | 74 | 74 | **100%** | 1.71 s | 7.93 s | 4.6× |
+| 100 GD / 6 mục (giỏ ≤ 4) | 4 | 4 | **100%** | 0.002 s | 0.002 s | 1.0× |
+| 200 GD / 8 mục (giỏ ≤ 6) | 8 | 8 | **100%** | 0.009 s | 0.007 s | 0.8× |
+| 500 GD / 12 mục (giỏ ≤ 8) | 33 | 33 | **100%** | 0.094 s | 0.061 s | 0.7× |
+| 1000 GD / 18 mục (giỏ ≤ 12) | 49 | 49 | **100%** | 0.21 s | 2.25 s | **10.5×** |
+| 2000 GD / 20 mục (giỏ ≤ 12) | 74 | 74 | **100%** | 0.61 s | 3.57 s | 5.9× |
 
 > Ở luồng nhỏ, chi phí tính cận trên âm có thể ngang hoặc lớn hơn ground truth
 > (vì ground truth rất rẻ khi giỏ hàng ngắn). Lợi thế xuất hiện rõ khi giỏ
@@ -265,12 +265,12 @@ Số liệu đầy đủ (sinh tự động, tái lập được): [`docs/result
 
 | Luồng | Chiến lược | Thời gian | HAEI tìm được | Khớp ground truth | Bỏ sót |
 |---|---|---|---|---|---|
-| 500 GD / 14 mục | **âm** (an toàn) | 0.26 s | 39 / 39 | **100%** | — |
-| | kiểu PDF | 0.12 s | 39 / 39 | 100% | — |
-| 1000 GD / 18 mục | **âm** (an toàn) | 0.57 s | 49 / 49 | **100%** | — |
-| | kiểu PDF | 0.35 s | 48 / 49 | 97,96% | `{f,m}` |
-| 2000 GD / 20 mục | **âm** (an toàn) | 1.29 s | 43 / 43 | **100%** | — |
-| | kiểu PDF | 1.14 s | 43 / 43 | 100% | — |
+| 500 GD / 14 mục | **âm** (an toàn) | 0.19 s | 39 / 39 | **100%** | — |
+| | kiểu PDF | 0.08 s | 39 / 39 | 100% | — |
+| 1000 GD / 18 mục | **âm** (an toàn) | 0.32 s | 49 / 49 | **100%** | — |
+| | kiểu PDF | 0.20 s | 48 / 49 | 97,96% | `{f,m}` |
+| 2000 GD / 20 mục | **âm** (an toàn) | 0.51 s | 43 / 43 | **100%** | — |
+| | kiểu PDF | 0.47 s | 43 / 43 | 100% | — |
 
 > Bản "kiểu PDF" **không phải lúc nào cũng sai** — sai ở quy mô đủ lớn. Đó
 > chính là lý do cần kiểm chứng tự động bằng ground truth thay vì tin vào

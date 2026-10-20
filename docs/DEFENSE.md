@@ -94,7 +94,7 @@ Kết quả: **khớp 100% ground truth** ở mọi cấu hình đã thử.
 
 **Hỏi: Tốn thêm bao nhiêu?**
 Khoảng **1.3–2×** so với bản cũ (bản cũ sai). Đổi lại: tìm đủ 49/49 HAEI
-thay vì 48/49, và nhanh hơn ground truth **8.2×** ở luồng 1000 GD (ground
+thay vì 48/49, và nhanh hơn ground truth **10.5×** ở luồng 1000 GD (ground
 truth phải duyệt 797 164 tập mục).
 
 **Hỏi: Có làm chậm quá không?**
@@ -131,7 +131,7 @@ việc — không thay đổi thứ tự so sánh giữa các mục.
 Vì ground truth `O(Σ2^|T_j|)` rất rẻ khi giỏ hàng ngắn (2^4 = 16 tập mục/giao
 dịch), trong khi thuật toán phải trả chi phí cố định cho việc tính cận trên âm
 ở mọi entry. Lợi thế xuất hiện khi giỏ hàng dài — đúng đặc tính mũ. Bảng
-số liệu §6.1 của README thể hiện rõ điều này (0.8× → **8.2×**).
+số liệu §6.1 của README thể hiện rõ điều này (0.7× → **10.5×**).
 
 **Hỏi: Số lượng HAEI phụ thuộc tham số thế nào?**
 - Tăng `f` (suy giảm nhẹ hơn) → giao dịch cũ giữ giá trị hơn → **nhiều** HAEI
