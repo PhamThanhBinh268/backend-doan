@@ -46,7 +46,7 @@ from .core.baseline import compare_with_exact, exact_mine
 
 START_TIME = time.time()
 
-app = FastAPI(title="HAEIM_Damped Backend", version="2.0.0",
+app = FastAPI(title="HAEIM_Damped Backend", version="2.1.0",
               description="Backend khai thác tập mục hiệu suất trung bình cao trên luồng suy giảm "
                           "(3 pha: Construction/Restructure/Expansion) kèm mô hình kiểm chứng "
                           "độ đúng và bộ công cụ đo đạc hiệu năng.")
@@ -99,6 +99,24 @@ def root():
             "last_stats": miner.last_stats,
             "uptime_s": round(time.time() - START_TIME, 1),
             "default": {"f": DEFAULT_F, "minae": DEFAULT_MINAE}}
+
+
+@app.get("/api/health")
+def health():
+    """Trạng thái sức khỏe của backend (healthcheck / nâng cấp vận hành).
+
+    Trả về trạng thái nền tảng: service alive, luồng hiện tại, phiên bản miner.
+    Dùng cho monitoring/healthcheck khi triển khai production.
+    """
+    return {
+        "status": "ok",
+        "service": "HAEIM_Damped",
+        "transactions": len(miner.transactions),
+        "ltid": miner.ltid,
+        "items": len(miner.eu),
+        "version": miner.version,
+        "uptime_s": round(time.time() - START_TIME, 1),
+    }
 
 
 @app.get("/api/config")

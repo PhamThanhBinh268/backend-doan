@@ -72,6 +72,7 @@ f^(Ltid-tid) phụ thuộc Ltid thay đổi liên tục — suy giảm chỉ áp
 from __future__ import annotations
 
 import copy
+import math
 import threading
 import time
 from dataclasses import dataclass, field
@@ -90,14 +91,16 @@ def _round4(x: float) -> float:
 
 def _validate_decay(f: float) -> float:
     f = float(f)
-    if not 0.0 < f < 1.0:
+    # chặt chẽ: từ chối NaN/inf — `not 0 < f < 1` không bắt được NaN, cần isfinite
+    if not math.isfinite(f) or not 0.0 < f < 1.0:
         raise ValueError("f phải thỏa 0<f<1 (PDF §1)")
     return f
 
 
 def _validate_minae(minae: float) -> float:
     minae = float(minae)
-    if minae < 0:
+    # chặt chẽ: từ chối NaN/inf — `minae < 0` không bắt được NaN
+    if not math.isfinite(minae) or minae < 0:
         raise ValueError("minae phải >= 0")
     return minae
 

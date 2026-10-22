@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictBool, StrictInt, field_validator
 
 
 class TxItem(BaseModel):
@@ -20,7 +20,8 @@ class TxItem(BaseModel):
 
 
 class NewTransaction(BaseModel):
-    tid: Optional[int] = Field(default=None, gt=0)
+    # StrictInt: tid PHẢI là số nguyên > 0 — từ chối 2.5, "8", 0, âm (strict).
+    tid: Optional[StrictInt] = Field(default=None, gt=0)
     items: list[TxItem] = Field(min_length=1)
 
 
@@ -44,9 +45,9 @@ class BulkTransactions(BaseModel):
 
 
 class MineRequest(BaseModel):
-    f: float = Field(default=0.8, gt=0, lt=1, description="Hệ số suy giảm, 0<f<1")
+    f: float = Field(default=0.8, gt=0, lt=1, strict=True, description="Hệ số suy giảm, 0<f<1")
     minae: float = Field(default=0.2, ge=0, description="Ngưỡng hiệu suất trung bình tối thiểu")
-    sound: bool = Field(
+    sound: StrictBool = Field(
         default=True,
         description="True = cắt tỉa bằng cận trên ÂM (không bỏ sót HAEI); "
                     "False = cận trên 1-phần-mở-rộng (nhanh hơn nhưng bỏ sót)",
@@ -57,7 +58,7 @@ class MineRequest(BaseModel):
 class ValidateRequest(BaseModel):
     """Kiểm chứng thuật toán cắt tỉa so với ground truth (duyệt tất cả tập mục)."""
 
-    f: float = Field(default=0.8, gt=0, lt=1)
+    f: float = Field(default=0.8, gt=0, lt=1, strict=True)
     minae: float = Field(default=0.2, ge=0)
     max_tx_items: int = Field(default=16, ge=1, le=22,
                               description="Chặn an toàn: số mục tối đa/1 giao dịch")
@@ -69,7 +70,7 @@ class BenchRequest(BaseModel):
     n_transactions: int = Field(default=200, ge=1, le=20000)
     n_items: int = Field(default=12, ge=1, le=100)
     seed: int = Field(default=42, ge=0)
-    f: float = Field(default=0.8, gt=0, lt=1)
+    f: float = Field(default=0.8, gt=0, lt=1, strict=True)
     minae: float = Field(default=0.2, ge=0)
     with_exact: bool = Field(default=True, description="Chạy thêm ground truth để so sánh")
     max_items_per_tx: int = Field(default=6, ge=1, le=20,
@@ -83,7 +84,7 @@ class PruningComparisonRequest(BaseModel):
     n_items: int = Field(default=18, ge=1, le=100)
     max_items_per_tx: int = Field(default=12, ge=1, le=20)
     seed: int = Field(default=42, ge=0)
-    f: float = Field(default=0.8, gt=0, lt=1)
+    f: float = Field(default=0.8, gt=0, lt=1, strict=True)
     minae: float = Field(default=0.2, ge=0)
 
 
@@ -94,7 +95,7 @@ class ScalabilityRequest(BaseModel):
         default=None,
         description='Danh sách {"transactions": n, "items": m}; bỏ trống = bộ cố định',
     )
-    f: float = Field(default=0.8, gt=0, lt=1)
+    f: float = Field(default=0.8, gt=0, lt=1, strict=True)
     minae: float = Field(default=0.2, ge=0)
     seed: int = Field(default=42, ge=0)
     with_exact: bool = Field(default=True)
@@ -154,5 +155,5 @@ class ExplainRequest(BaseModel):
     """Giải thích một pattern (dùng GET hoặc POST)."""
 
     pattern: list[str] = Field(min_length=1)
-    f: float = Field(default=0.8, gt=0, lt=1)
+    f: float = Field(default=0.8, gt=0, lt=1, strict=True)
     minae: float = Field(default=0.2, ge=0)

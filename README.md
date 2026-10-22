@@ -166,6 +166,7 @@ Chi tiết kiến trúc & phân tích độ phức tạp: [`docs/ARCHITECTURE.md
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
+| `GET` | `/api/health` | **Nâng cấp backend — trạng thái sức khỏe** (`status: ok`, luồng hiện tại, uptime) — dùng cho healthcheck khi deploy |
 | `GET` | `/` | trạng thái, `ltid`, số GD, phiên bản, `last_stats` |
 | `GET` | `/api/config` | bảng `eu/cu/inv` + tham số mặc định |
 | `GET` | `/api/transactions` | danh sách giao dịch hiện tại |
